@@ -4,6 +4,7 @@
 #include <arpa/inet.h>
 #include <linux/netdevice.h>
 #include <netinet/in.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,7 +12,7 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/types.h>
-#include <time.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "led-matrix.h"
@@ -21,6 +22,13 @@
 #define PUSHER_NETWORK_INTERFACE "eth0"
 #define PIXELPUSHER_DISCOVERYPORT 7331
 #define PIXELPUSHER_LISTENPORT 9897
+
+int64_t CurrentTimeMicros() {
+  struct timeval tv;
+  gettimeofday(&tv, NULL);
+  int64_t result = tv.tv_sec;
+  return result * 1000000 + tv.tv_usec;
+}
 
 // Given the name of the interface, such as "eth0", fill the IP address and
 // broadcast address into "header"
@@ -86,12 +94,19 @@ protected:
 class Beacon : public ShutdownThread {
 public:
   Beacon(const DiscoveryPacketHeader &header,
-         const PixelPusher &pixel_pusher) {
+         const PixelPusher &pixel_pusher) : previous_sequence_(-1) {
     packet_.header = header;
     packet_.p.pixelpusher = pixel_pusher;
   }
 
-  // TODO: Update delta_sequence and update_period.
+  void UpdatePacketStats(uint32_t seen_sequence, uint32_t update_micros) {
+    MutexLock l(&mutex_);
+    packet_.p.pixelpusher.update_period = update_micros;
+    int32_t sequence_diff = seen_sequence - previous_sequence_ - 1;
+    if (sequence_diff > 0)
+      packet_.p.pixelpusher.delta_sequence += sequence_diff;
+    previous_sequence_ = seen_sequence;
+  }
 
   virtual void Run() {
     int s;
@@ -116,7 +131,13 @@ public:
             PIXELPUSHER_DISCOVERYPORT);
     struct timespec sleep_time = { 1, 0 };  // todo: tweak.
     while (running_) {
-      if (sendto(s, &packet_, sizeof(packet_), 0,
+      DiscoveryPacket sending_header;
+      {
+        MutexLock l(&mutex_);
+        sending_header = packet_;
+        packet_.p.pixelpusher.delta_sequence = 0;
+      }
+      if (sendto(s, &sending_header, sizeof(sending_header), 0,
                  (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         perror("Broadcasting problem");
       }
@@ -125,6 +146,8 @@ public:
   }
 
 private:
+  Mutex mutex_;
+  uint32_t previous_sequence_;
   DiscoveryPacket packet_;
 };
 
@@ -145,7 +168,8 @@ private:
 
 class PacketReceiver : public ShutdownThread {
 public:
-  PacketReceiver(RGBMatrix *m) : matrix_(m) {}
+  PacketReceiver(RGBMatrix *m, Beacon *beacon) : matrix_(m), beacon_(beacon) {
+  }
 
   virtual void Run() {
     const int strip_data_len = 1 /* strip number */ + 3 * matrix_->width();
@@ -174,33 +198,38 @@ public:
       perror("bind");
       exit(1);
     }
-    char buf[1500];
+    char buf[1500]; // max 1460
     fprintf(stderr, "Listening for pixels on port %d\n", PIXELPUSHER_LISTENPORT);
     while (running_) {
-      ssize_t result = recvfrom(s, buf, sizeof(buf), 0, NULL, 0);
-      if (result < 0) {
+      ssize_t buffer_bytes = recvfrom(s, buf, sizeof(buf), 0, NULL, 0);
+      const int64_t start_time = CurrentTimeMicros();
+      if (buffer_bytes < 0) {
         perror("receive problem");
         continue;
       }
-      if (result <= 4) {
+      if (buffer_bytes <= 4) {
         fprintf(stderr, "weird, no sequence number ? Got %d bytes\n",
-                result);
+                buffer_bytes);
       }
 
-      // TODO: _not_ ignore the sequence number :)
-      result -= 4;
+      const char *buf_pos = buf;
 
-      if (result % strip_data_len != 0) {
+      uint32_t sequence;
+      memcpy(&sequence, buf_pos, sizeof(sequence));
+      buffer_bytes -= 4;
+      buf_pos += 4;
+
+      if (buffer_bytes % strip_data_len != 0) {
         fprintf(stderr, "Expecting multiple of {1 + (rgb)*%d} = %d, "
                 "but got %d bytes (leftover: %d)\n", matrix_->width(),
-                strip_data_len, result, result % strip_data_len);
+                strip_data_len, buffer_bytes, buffer_bytes % strip_data_len);
         continue;
       }
-      const int received_strips = result / strip_data_len;
-      const char *buf_pos = buf + 4;  // skip sequence.
-      
+
+      const int received_strips = buffer_bytes / strip_data_len;
       for (int i = 0; i < received_strips; ++i) {
         StripData *data = (StripData *) buf_pos;
+        // Copy into frame buffer.
         for (int x = 0; x < matrix_->width(); ++x) {
           matrix_->SetPixel(x, data->strip_index,
                             data->pixel[x].red,
@@ -209,11 +238,15 @@ public:
         }
         buf_pos += strip_data_len;
       }
+
+      const int64_t end_time = CurrentTimeMicros();
+      beacon_->UpdatePacketStats(sequence, end_time - start_time);
     }
   }
   
 private:
   RGBMatrix *const matrix_;
+  Beacon *const beacon_;
 };
 
 int main(int argc, char *argv[]) {
@@ -247,15 +280,14 @@ int main(int argc, char *argv[]) {
   pixel_pusher.controller_ordinal = 0;  // make configurable.
   pixel_pusher.group_ordinal = 0;       // make configurable.
 
-  // Start threads.
-  PacketReceiver *receiver = new PacketReceiver(&matrix);
-  receiver->Start(1);
-
+  // Create our threads.
   Beacon *discovery_beacon = new Beacon(header, pixel_pusher);
-  discovery_beacon->Start(5);
-
+  PacketReceiver *receiver = new PacketReceiver(&matrix, discovery_beacon);
   DisplayUpdater *updater = new DisplayUpdater(&matrix);
-  updater->Start(10);
+
+  receiver->Start(1);         // fairly low priority
+  discovery_beacon->Start(5); // This should accurately send updates.
+  updater->Start(10);         // High prio: PWM timing.
 
   printf("Press <RETURN> to shut down.\n");
   getchar();  // for now, run until <RETURN>
