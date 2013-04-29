@@ -4,10 +4,12 @@ OBJECTS=main.o gpio.o led-matrix.o thread.o
 BINARIES=led-matrix
 LDFLAGS=-lrt -lm -lpthread
 
-all : $(BINARIES)
+all : led-matrix
 
 led-matrix : $(OBJECTS)
 	$(CXX) $(CXXFLAGS) $^ -o $@ $(LDFLAGS)
+
+led-matrix.o : led-matrix.cc led-matrix.h
 
 clean:
 	rm -f $(OBJECTS) $(BINARIES)

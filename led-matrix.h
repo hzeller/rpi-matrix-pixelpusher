@@ -68,6 +68,8 @@ private:
   };
 
   Screen bitplane_[kPWMBits];
+
+  uint8_t luminance_lut[255];
 };
 
 #endif  // RPI_RGBMATRIX_H

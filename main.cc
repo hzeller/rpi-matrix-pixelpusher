@@ -100,8 +100,13 @@ public:
   }
 
   void UpdatePacketStats(uint32_t seen_sequence, uint32_t update_micros) {
+    // Say we have 60Hz update and 7 strips per packet, we don't really need
+    // more update rate than this (we should do something smart with swapped
+    // buffers and such).
+    uint32_t kMinUpdate = 16000 / 9;
     MutexLock l(&mutex_);
-    packet_.p.pixelpusher.update_period = update_micros;
+    packet_.p.pixelpusher.update_period
+      = update_micros < kMinUpdate ? kMinUpdate : update_micros;
     int32_t sequence_diff = seen_sequence - previous_sequence_ - 1;
     if (sequence_diff > 0)
       packet_.p.pixelpusher.delta_sequence += sequence_diff;
@@ -127,8 +132,8 @@ public:
     addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
     addr.sin_port = htons(PIXELPUSHER_DISCOVERYPORT);
 
-    fprintf(stderr, "Starting discovery beacon; to port %d\n",
-            PIXELPUSHER_DISCOVERYPORT);
+    fprintf(stderr, "Starting PixelPusher discovery beacon "
+            "broadcasting to port %d\n", PIXELPUSHER_DISCOVERYPORT);
     struct timespec sleep_time = { 1, 0 };  // todo: tweak.
     while (running_) {
       DiscoveryPacket sending_header;
@@ -199,7 +204,8 @@ public:
       exit(1);
     }
     char buf[1500]; // max 1460
-    fprintf(stderr, "Listening for pixels on port %d\n", PIXELPUSHER_LISTENPORT);
+    fprintf(stderr, "Listening for pixels pushed to port %d\n",
+            PIXELPUSHER_LISTENPORT);
     while (running_) {
       ssize_t buffer_bytes = recvfrom(s, buf, sizeof(buf), 0, NULL, 0);
       const int64_t start_time = CurrentTimeMicros();
@@ -276,7 +282,7 @@ int main(int argc, char *argv[]) {
   pixel_pusher.max_strips_per_packet
     = (1460 - 4 /* sequence */) / (1 + 3 * pixel_pusher.pixels_per_strip);
   pixel_pusher.power_total = 1;         // ?
-  pixel_pusher.update_period = 1000;    // this is a lie.
+  pixel_pusher.update_period = 1000;    // Some initial assumption.
   pixel_pusher.controller_ordinal = 0;  // make configurable.
   pixel_pusher.group_ordinal = 0;       // make configurable.
 
@@ -287,7 +293,7 @@ int main(int argc, char *argv[]) {
 
   receiver->Start(1);         // fairly low priority
   discovery_beacon->Start(5); // This should accurately send updates.
-  updater->Start(10);         // High prio: PWM timing.
+  updater->Start(50);         // High prio: PWM timing.
 
   printf("Press <RETURN> to shut down.\n");
   getchar();  // for now, run until <RETURN>

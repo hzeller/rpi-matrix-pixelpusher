@@ -15,10 +15,11 @@
 
 #include "gpio.h"
 
-// Clocking in a row takes about 3.4usec (TODO: this is actually per board)
+// Clocking in a row takes about 3.4usec per board.
 // Because clocking the data in is part of the 'wait time', we need to
 // substract that from the row sleep time.
-static const int kRowClockTime = 3400;
+// Since this is too flickry, we don't do this for now, and get some inaccurancy.
+static const int kRowClockTime = 1 * 3400;
 static const int kBaseTime = kRowClockTime;  // smallest possible value.
 
 const long row_sleep_nanos[8] = {   // Only using the first kPWMBits elements.
@@ -54,6 +55,14 @@ static void sleep_nanos(long nanos) {
   }
 }
 
+// If we could have > 10bit PWM, that would be great :/
+// This needs some experimentation depending on the board.
+static uint8_t luminance_curve(uint8_t c) {
+  if (c < 64) return c / 4;
+  if (c < 128) return ((c - 63) * 3 + 63) / 4;
+  return ((c - 127) * 6 + 255) / 4;
+}
+
 RGBMatrix::RGBMatrix(GPIO *io) : io_(io) {
   // Tell GPIO about all bits we intend to use.
   IoBits b;
@@ -66,6 +75,9 @@ RGBMatrix::RGBMatrix(GPIO *io) : io_(io) {
   const uint32_t result = io_->InitOutputs(b.raw);
   assert(result == b.raw);
   assert(kPWMBits < 8);    // only up to 7 makes sense.
+  for (int i = 0; i < 256; ++i) {
+    luminance_lut[i] = luminance_curve(i);
+  }
   ClearScreen();
 }
 
@@ -95,9 +107,10 @@ void RGBMatrix::SetPixel(uint8_t x, uint8_t y,
     y = 63 - y;
   }
   
-  // TODO: re-map values to be luminance corrected (sometimes called 'gamma').
-  // Ideally, we had like 10PWM bits for this, but we're too slow for that :/
-  
+  red = luminance_lut[red];
+  green = luminance_lut[green];
+  blue = luminance_lut[blue];
+
   // Scale to the number of bit planes we actually have, so that MSB matches
   // MSB of PWM.
   red   >>= 8 - kPWMBits;
