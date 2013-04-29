@@ -1,6 +1,8 @@
 Controlling RGB LED display on Raspberry Pi GPIO via PixelPusher protocol
 =========================================================================
 
+Example: <http://youtu.be/ZglGuMaKvpY>
+
 This is mostly experimental code. I don't have yet the update rate and PWM
 accuracy I'd like to have. Yes, DMA is on the list, but it is actually slower.
 
