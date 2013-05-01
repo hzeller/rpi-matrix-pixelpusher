@@ -148,6 +148,10 @@ void RGBMatrix::SetPixel(uint8_t x, uint8_t y,
   }
 }
 
+void RGBMatrix::CopyFrom(const RGBMatrix &other) {
+  memcpy(bitplane_, other.bitplane_, sizeof(bitplane_));
+}
+
 void RGBMatrix::UpdateScreen() {
   IoBits serial_mask;   // Mask of bits we need to set while clocking in.
   serial_mask.bits.r1 = serial_mask.bits.g1 = serial_mask.bits.b1 = 1;

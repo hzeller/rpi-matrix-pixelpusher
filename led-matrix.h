@@ -41,6 +41,8 @@ class RGBMatrix {
   // thread.
   void UpdateScreen();
 
+  // Copy content from other matrix.
+  void CopyFrom(const RGBMatrix &other);
 
 private:
   GPIO *const io_;
