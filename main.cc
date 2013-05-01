@@ -1,6 +1,21 @@
-/*
- * PixelPusher protocol implementation for LED matrix
- */
+//  PixelPusher protocol implementation for LED matrix
+//
+//  Copyright (C) 2013 Henner Zeller <h.zeller@acm.org>
+//    
+//  This program is free software; you can redistribute it and/or modify
+//  it under the terms of the GNU General Public License as published by
+//  the Free Software Foundation; either version 3 of the License, or
+//  (at your option) any later version.
+//
+//  This program is distributed in the hope that it will be useful,
+//  but WITHOUT ANY WARRANTY; without even the implied warranty of
+//  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//  GNU General Public License for more details.
+//
+//  You should have received a copy of the GNU General Public License
+//  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+#include <algorithm>
 #include <arpa/inet.h>
 #include <linux/netdevice.h>
 #include <netinet/in.h>
@@ -11,17 +26,27 @@
 #include <stropts.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
-#include <sys/types.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 
 #include "led-matrix.h"
 #include "thread.h"
 #include "universal-discovery-protocol.h"
 
-#define PUSHER_NETWORK_INTERFACE "eth0"
-#define PIXELPUSHER_DISCOVERYPORT 7331
-#define PIXELPUSHER_LISTENPORT 9897
+static const char kNetworkInterface[] = "eth0";
+static const uint16_t kPixelPusherDiscoveryPort = 7331;
+static const uint16_t kPixelPusherListenPort = 9897;
+
+// The maximum packet size on the PixelPusher network. Since this is optimized
+// to be working without fragmenting the packets, 1460 is the biggest size
+// currently sent by the server (also, the server actually fails if we claim
+// to be able to accept bigger sizes).
+static const int kMaxUDPPacketSize = 1460;
+
+// Say we want 60Hz update and 9 packets per frame (7 strips / packet), we
+// don't really need more update rate than this.
+static const uint32_t kMinUpdatePeriodUSec = 16666 / 9;
 
 int64_t CurrentTimeMicros() {
   struct timeval tv;
@@ -100,13 +125,10 @@ public:
   }
 
   void UpdatePacketStats(uint32_t seen_sequence, uint32_t update_micros) {
-    // Say we have 60Hz update and 7 strips per packet, we don't really need
-    // more update rate than this (we should do something smart with swapped
-    // buffers and such).
-    uint32_t kMinUpdate = 16000 / 9;
     MutexLock l(&mutex_);
-    packet_.p.pixelpusher.update_period
-      = update_micros < kMinUpdate ? kMinUpdate : update_micros;
+    packet_.p.pixelpusher.update_period = (update_micros < kMinUpdatePeriodUSec
+                                           ? kMinUpdatePeriodUSec
+                                           : update_micros);
     int32_t sequence_diff = seen_sequence - previous_sequence_ - 1;
     if (sequence_diff > 0)
       packet_.p.pixelpusher.delta_sequence += sequence_diff;
@@ -130,10 +152,10 @@ public:
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_BROADCAST);
-    addr.sin_port = htons(PIXELPUSHER_DISCOVERYPORT);
+    addr.sin_port = htons(kPixelPusherDiscoveryPort);
 
     fprintf(stderr, "Starting PixelPusher discovery beacon "
-            "broadcasting to port %d\n", PIXELPUSHER_DISCOVERYPORT);
+            "broadcasting to port %d\n", kPixelPusherDiscoveryPort);
     struct timespec sleep_time = { 1, 0 };  // todo: tweak.
     while (running_) {
       DiscoveryPacket sending_header;
@@ -177,6 +199,7 @@ public:
   }
 
   virtual void Run() {
+    char *packet_buffer = new char[kMaxUDPPacketSize];
     const int strip_data_len = 1 /* strip number */ + 3 * matrix_->width();
     struct Pixel {
       uint8_t red;
@@ -198,16 +221,16 @@ public:
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(PIXELPUSHER_LISTENPORT);
+    addr.sin_port = htons(kPixelPusherListenPort);
     if (bind(s, (struct sockaddr *) &addr, sizeof(addr)) < 0) {
       perror("bind");
       exit(1);
     }
-    char buf[1500]; // max 1460
     fprintf(stderr, "Listening for pixels pushed to port %d\n",
-            PIXELPUSHER_LISTENPORT);
+            kPixelPusherListenPort);
     while (running_) {
-      ssize_t buffer_bytes = recvfrom(s, buf, sizeof(buf), 0, NULL, 0);
+      ssize_t buffer_bytes = recvfrom(s, packet_buffer, kMaxUDPPacketSize,
+                                      0, NULL, 0);
       const int64_t start_time = CurrentTimeMicros();
       if (buffer_bytes < 0) {
         perror("receive problem");
@@ -218,7 +241,7 @@ public:
                 buffer_bytes);
       }
 
-      const char *buf_pos = buf;
+      const char *buf_pos = packet_buffer;
 
       uint32_t sequence;
       memcpy(&sequence, buf_pos, sizeof(sequence));
@@ -248,6 +271,7 @@ public:
       const int64_t end_time = CurrentTimeMicros();
       beacon_->UpdatePacketStats(sequence, end_time - start_time);
     }
+    delete [] packet_buffer;
   }
   
 private:
@@ -266,7 +290,7 @@ int main(int argc, char *argv[]) {
   DiscoveryPacketHeader header;
   memset(&header, 0, sizeof(header));
 
-  if (!DetermineNetwork(PUSHER_NETWORK_INTERFACE, &header)) {
+  if (!DetermineNetwork(kNetworkInterface, &header)) {
     return 1;
   }
   header.device_type = PIXELPUSHER;
@@ -279,8 +303,13 @@ int main(int argc, char *argv[]) {
   memset(&pixel_pusher, 0, sizeof(pixel_pusher));
   pixel_pusher.strips_attached = matrix.height();
   pixel_pusher.pixels_per_strip = matrix.width();
+  static const int kUsablePacketSize = kMaxUDPPacketSize - 4; // 4 bytes seq#
+  // Whatever fits in one packet, but not more than one 'frame'.
   pixel_pusher.max_strips_per_packet
-    = (1460 - 4 /* sequence */) / (1 + 3 * pixel_pusher.pixels_per_strip);
+    = std::min(kUsablePacketSize / (1 + 3 * pixel_pusher.pixels_per_strip),
+               (int) pixel_pusher.strips_attached);
+  fprintf(stderr, "Accepting max %d strips per packet.\n",
+          pixel_pusher.max_strips_per_packet);
   pixel_pusher.power_total = 1;         // ?
   pixel_pusher.update_period = 1000;    // Some initial assumption.
   pixel_pusher.controller_ordinal = 0;  // make configurable.
@@ -291,7 +320,7 @@ int main(int argc, char *argv[]) {
   PacketReceiver *receiver = new PacketReceiver(&matrix, discovery_beacon);
   DisplayUpdater *updater = new DisplayUpdater(&matrix);
 
-  receiver->Start(1);         // fairly low priority
+  receiver->Start(0);         // fairly low priority
   discovery_beacon->Start(5); // This should accurately send updates.
   updater->Start(50);         // High prio: PWM timing.
 

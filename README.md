@@ -87,3 +87,6 @@ Right now, I tested this with the default Linux distribution ("wheezy"). Because
 this does not have any realtime patches, the PWM can look a bit uneven under
 load. If you test this with realtime extensions, let me know how it works.
 
+License
+-------
+GNU General Public License, Version 3.0
