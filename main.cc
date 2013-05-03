@@ -38,11 +38,11 @@ static const char kNetworkInterface[] = "eth0";
 static const uint16_t kPixelPusherDiscoveryPort = 7331;
 static const uint16_t kPixelPusherListenPort = 9897;
 
-// The maximum packet size on the PixelPusher network. Since this is optimized
-// to be working without fragmenting the packets, 1460 is the biggest size
-// currently sent by the server (also, the server actually fails if we claim
-// to be able to accept bigger sizes).
-static const int kMaxUDPPacketSize = 1460;
+// The maximum packet size we accept.
+// Typicall, the PixelPusher network will attempt to send smaller,
+// non-fragmenting packets of size 1460; however, we would accept up to
+// the UDP packet size.
+static const int kMaxUDPPacketSize = 65507;
 
 // Say we want 60Hz update and 9 packets per frame (7 strips / packet), we
 // don't really need more update rate than this.
