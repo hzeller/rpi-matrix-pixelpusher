@@ -28,5 +28,5 @@ on the network, with 64 strips with 64 pixels. You can control these for instanc
 with the Processing framework <http://processing.org/>
 
 [rgb-matrix-lib]: https://github.com/hzeller/rpi-rgb-led-matrix
-[matrix64]: https://github.com/hzeller/rpi-matrix-pixelpusher/raw/master/img/chained-64x64.jpg
-[vid]: https://github.com/hzeller/rpi-matrix-pixelpusher/raw/master/img/pp-vid.jpg
+[matrix64]: ./img/chained-64x64.jpg
+[vid]: ./img/pp-vid.jpg
