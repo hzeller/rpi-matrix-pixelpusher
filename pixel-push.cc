@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <arpa/inet.h>
+#include <assert.h>
 #include <linux/netdevice.h>
 #include <netinet/in.h>
 #include <stdint.h>
@@ -47,6 +48,40 @@ static const int kMaxUDPPacketSize = 65507;
 // Say we want 60Hz update and 9 packets per frame (7 strips / packet), we
 // don't really need more update rate than this.
 static const uint32_t kMinUpdatePeriodUSec = 16666 / 9;
+
+// Mapping of our 4x 32x32 display to a 64x64 display.
+// [>] [>]
+//         v
+// [<] [<]
+class LargeSquare64x64Canvas : public Canvas {
+public:
+  // This class takes over ownership of the delegatee.
+  LargeSquare64x64Canvas(Canvas *delegatee) : delegatee_(delegatee) {
+    // Our assumptions of the underlying geometry:
+    assert(delegatee->height() == 32);
+    assert(delegatee->width() == 128);
+  }
+  virtual ~LargeSquare64x64Canvas() { delete delegatee_; }
+
+  virtual void ClearScreen() { delegatee_->ClearScreen(); }
+  virtual void FillScreen(uint8_t red, uint8_t green, uint8_t blue) {
+    delegatee_->FillScreen(red, green, blue);
+  }
+  virtual int width() const { return 64; }
+  virtual int height() const { return 64; }
+  virtual void SetPixel(int x, int y,
+                        uint8_t red, uint8_t green, uint8_t blue) {
+    // We have up to column 64 one direction, then folding around. Lets map
+    if (y > 31) {
+      x = 127 - x;
+      y = 63 - y;
+    }
+    delegatee_->SetPixel(x, y, red, green, blue);
+  }
+
+private:
+  Canvas *delegatee_;
+};
 
 int64_t CurrentTimeMicros() {
   struct timeval tv;
@@ -178,24 +213,9 @@ private:
   DiscoveryPacket packet_;
 };
 
-// Push framebuffer updates.
-class DisplayUpdater : public ShutdownThread {
-public:
-  DisplayUpdater(RGBMatrix *m) : matrix_(m) {}
-
-  void Run() {
-    while (running_) {
-      matrix_->UpdateScreen();
-    }
-  }
-
-private:
-  RGBMatrix *const matrix_;
-};
-
 class PacketReceiver : public ShutdownThread {
 public:
-  PacketReceiver(RGBMatrix *m, Beacon *beacon) : matrix_(m), beacon_(beacon) {
+  PacketReceiver(Canvas *c, Beacon *beacon) : matrix_(c), beacon_(beacon) {
   }
 
   virtual void Run() {
@@ -237,7 +257,7 @@ public:
         continue;
       }
       if (buffer_bytes <= 4) {
-        fprintf(stderr, "weird, no sequence number ? Got %d bytes\n",
+        fprintf(stderr, "weird, no sequence number ? Got %zd bytes\n",
                 buffer_bytes);
       }
 
@@ -250,7 +270,7 @@ public:
 
       if (buffer_bytes % strip_data_len != 0) {
         fprintf(stderr, "Expecting multiple of {1 + (rgb)*%d} = %d, "
-                "but got %d bytes (leftover: %d)\n", matrix_->width(),
+                "but got %zd bytes (leftover: %zd)\n", matrix_->width(),
                 strip_data_len, buffer_bytes, buffer_bytes % strip_data_len);
         continue;
       }
@@ -275,7 +295,7 @@ public:
   }
   
 private:
-  RGBMatrix *const matrix_;
+  Canvas *const matrix_;
   Beacon *const beacon_;
 };
 
@@ -284,7 +304,7 @@ int main(int argc, char *argv[]) {
   GPIO io;
   if (!io.Init())
     return 1;
-  RGBMatrix matrix(&io);
+  Canvas *canvas = new LargeSquare64x64Canvas(new RGBMatrix(&io, 32, 4));
 
   // Init PixelPusher protocol
   DiscoveryPacketHeader header;
@@ -301,8 +321,8 @@ int main(int argc, char *argv[]) {
 
   PixelPusher pixel_pusher;
   memset(&pixel_pusher, 0, sizeof(pixel_pusher));
-  pixel_pusher.strips_attached = matrix.height();
-  pixel_pusher.pixels_per_strip = matrix.width();
+  pixel_pusher.strips_attached = canvas->height();
+  pixel_pusher.pixels_per_strip = canvas->width();
   static const int kUsablePacketSize = kMaxUDPPacketSize - 4; // 4 bytes seq#
   // Whatever fits in one packet, but not more than one 'frame'.
   pixel_pusher.max_strips_per_packet
@@ -317,24 +337,14 @@ int main(int argc, char *argv[]) {
 
   // Create our threads.
   Beacon *discovery_beacon = new Beacon(header, pixel_pusher);
-  PacketReceiver *receiver = new PacketReceiver(&matrix, discovery_beacon);
-  DisplayUpdater *updater = new DisplayUpdater(&matrix);
+  PacketReceiver *receiver = new PacketReceiver(canvas, discovery_beacon);
 
   receiver->Start(0);         // fairly low priority
   discovery_beacon->Start(5); // This should accurately send updates.
-  updater->Start(50);         // High prio: PWM timing.
 
   printf("Press <RETURN> to shut down.\n");
   getchar();  // for now, run until <RETURN>
   printf("shutting down\n");
-
-  // Stopping threads and wait for them to join.
-  delete updater;
-
-  // Final thing before exit: clear screen and update once, so that
-  // we don't have random pixels burn without refresh.
-  matrix.ClearScreen();
-  matrix.UpdateScreen();
 
   delete discovery_beacon;
   //delete receiver;    // recvfrom() blocking; don't care for now.
