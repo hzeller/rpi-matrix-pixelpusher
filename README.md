@@ -15,6 +15,14 @@ beginning of the video.
 
 ![Chaining multiple displays][matrix64]
 
+Compiling
+---------
+This project contains the RGB matrix as submodule. So after you have cloned
+this library, call:
+
+    git submodule init
+	git submodule update
+	
 Running
 -------
 Simply run the program as root (which is needed to access the GPIO pins).
