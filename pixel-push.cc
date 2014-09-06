@@ -35,6 +35,8 @@
 #include "thread.h"
 #include "universal-discovery-protocol.h"
 
+using namespace rgb_matrix;
+
 static const char kNetworkInterface[] = "eth0";
 static const uint16_t kPixelPusherDiscoveryPort = 7331;
 static const uint16_t kPixelPusherListenPort = 9897;
