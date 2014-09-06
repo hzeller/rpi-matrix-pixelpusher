@@ -1,7 +1,7 @@
 Controlling RGB LED display on Raspberry Pi GPIO via PixelPusher protocol
 =========================================================================
 
-Example video: ![Example video][vid]](http://youtu.be/ZglGuMaKvpY)
+Example video: ![Example video][vid](http://youtu.be/ZglGuMaKvpY)
 
 
 Code is (c) Henner Zeller <h.zeller@acm.org>,
