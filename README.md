@@ -1,7 +1,7 @@
 Controlling RGB LED display on Raspberry Pi GPIO via PixelPusher protocol
 =========================================================================
 
-Example video: [![Example video][vid]](http://youtu.be/ZglGuMaKvpY)
+[![Example video][vid]](http://youtu.be/ZglGuMaKvpY)
 
 
 Code is (c) Henner Zeller <h.zeller@acm.org>,
@@ -29,4 +29,4 @@ with the Processing framework <http://processing.org/>
 
 [rgb-matrix-lib]: https://github.com/hzeller/rpi-rgb-led-matrix
 [matrix64]: https://github.com/hzeller/rpi-matrix-pixelpusher/raw/master/img/chained-64x64.jpg
-[vid]: https://github.com/hzeller/rpi-matrix-pixelpusher/raw/master/img/video.png
+[vid]: https://github.com/hzeller/rpi-matrix-pixelpusher/raw/master/img/pp-vid.jpg
