@@ -1,4 +1,3 @@
-CFLAGS=-Wall -O3 -g
 CXXFLAGS=-Wall -O3 -g
 OBJECTS=pixel-push.o
 BINARIES=pixel-push

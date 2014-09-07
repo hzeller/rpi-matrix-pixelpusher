@@ -25,7 +25,10 @@ typedef enum DeviceType {
     PIXELPUSHER = 2
 } DeviceType;
 
-typedef struct PixelPusher {
+// This is slightly modified from the original to separate the dynamic from the
+// static parts.
+// All multi-byte values here are Little-Endian (read: host byte order).
+struct PixelPusherBase {
     uint8_t  strips_attached;
     uint8_t  max_strips_per_packet;
     uint16_t pixels_per_strip;  // uint16_t used to make alignment work
@@ -37,14 +40,31 @@ typedef struct PixelPusher {
     uint16_t artnet_universe;   // configured artnet starting point for this controller
     uint16_t artnet_channel;
     uint16_t my_port;
-    // The following has a dynamic length: max(8, strips_attached).
+    // The following has a dynamic length: max(8, strips_attached). So this
+    // PixelPusherBase can grow beyond its limits.
     uint8_t strip_flags[8];     // flags for each strip, for up to eight strips
+};
+
+struct PixelPusherExt {
     uint32_t pusher_flags;      // flags for the whole pusher
     uint32_t segments;          // number of segments in each strip
     uint32_t power_domain;      // power domain of this pusher
     uint8_t last_driven_ip[4];  // last host to drive this pusher
     uint16_t last_driven_port;  // source port of last update
-} PixelPusher;
+};
+
+struct PixelPusherContainer {
+    struct PixelPusherBase *base;  // dynamically sized.
+    struct PixelPusherExt  ext;
+};
+static inline size_t CalcPixelPusherBaseSize(int num_strips) {
+    return sizeof(struct PixelPusherBase) + (num_strips < 8 ? 0 : num_strips-8);
+}
+
+typedef struct StaticSizePixelPusher {
+    struct PixelPusherBase base;   // Good for up to 8 strips.
+    struct PixelPusherExt  ext;
+} PixelPusher1213;
 
 typedef struct LumiaBridge {
     // placekeeper
@@ -65,7 +85,7 @@ typedef struct EtherDream {
 } EtherDream;
 
 typedef union {
-    PixelPusher pixelpusher;
+    //    PixelPusher pixelpusher;
     LumiaBridge lumiabridge;
     EtherDream etherdream;
 } Particulars;

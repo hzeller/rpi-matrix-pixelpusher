@@ -1,3 +1,4 @@
+// -*- mode: c++; c-basic-offset: 2; indent-tabs-mode: nil; -*-
 //  PixelPusher protocol implementation for LED matrix
 //
 //  Copyright (C) 2013 Henner Zeller <h.zeller@acm.org>
@@ -40,6 +41,7 @@ using namespace rgb_matrix;
 static const char kNetworkInterface[] = "eth0";
 static const uint16_t kPixelPusherDiscoveryPort = 7331;
 static const uint16_t kPixelPusherListenPort = 9897;
+static const uint8_t kSoftwareRevision = 122;
 
 // The maximum packet size we accept.
 // Typicall, the PixelPusher network will attempt to send smaller,
@@ -143,32 +145,44 @@ bool DetermineNetwork(const char *interface, DiscoveryPacketHeader *header) {
 }
 
 // Threads deriving from this should exit Run() as soon as they see !running_
-class ShutdownThread : public Thread {
+class StoppableThread : public Thread {
 public:
-  ShutdownThread() : running_(true) {}
-  virtual ~ShutdownThread() { running_ = false; }
+  StoppableThread() : running_(true) {}
+  virtual ~StoppableThread() { running_ = false; }
 
 protected:
   volatile bool running_;  // TODO: use mutex, but this is good enough for now.
 };
 
 // Broadcast every second the discovery protocol.
-class Beacon : public ShutdownThread {
+class Beacon : public StoppableThread {
 public:
   Beacon(const DiscoveryPacketHeader &header,
-         const PixelPusher &pixel_pusher) : previous_sequence_(-1) {
-    packet_.header = header;
-    packet_.p.pixelpusher = pixel_pusher;
+         const PixelPusherContainer &pixel_pusher)
+    : header_(header), pixel_pusher_(pixel_pusher),
+      pixel_pusher_base_size_(CalcPixelPusherBaseSize(pixel_pusher_.base
+                                                      ->strips_attached)),
+      discovery_packet_size_(sizeof(header_)
+                             + pixel_pusher_base_size_
+                             + sizeof(pixel_pusher_.ext)),
+      //discovery_packet_buffer_(new uint8_t[discovery_packet_size_]),
+      previous_sequence_(-1) {
+    fprintf(stderr, "packet size: %zd\n", discovery_packet_size_);
+    discovery_packet_buffer_ = new uint8_t[discovery_packet_size_];
+  }
+  
+  virtual ~Beacon() {
+    delete [] discovery_packet_buffer_;
   }
 
   void UpdatePacketStats(uint32_t seen_sequence, uint32_t update_micros) {
     MutexLock l(&mutex_);
-    packet_.p.pixelpusher.update_period = (update_micros < kMinUpdatePeriodUSec
-                                           ? kMinUpdatePeriodUSec
-                                           : update_micros);
-    int32_t sequence_diff = seen_sequence - previous_sequence_ - 1;
+    pixel_pusher_.base->update_period = (update_micros < kMinUpdatePeriodUSec
+                                         ? kMinUpdatePeriodUSec
+                                         : update_micros);
+    const int32_t sequence_diff = seen_sequence - previous_sequence_ - 1;
     if (sequence_diff > 0)
-      packet_.p.pixelpusher.delta_sequence += sequence_diff;
+      pixel_pusher_.base->delta_sequence += sequence_diff;
     previous_sequence_ = seen_sequence;
   }
 
@@ -195,13 +209,22 @@ public:
             "broadcasting to port %d\n", kPixelPusherDiscoveryPort);
     struct timespec sleep_time = { 1, 0 };  // todo: tweak.
     while (running_) {
-      DiscoveryPacket sending_header;
+      // The header is of type 'DiscoveryPacket'.
       {
-        MutexLock l(&mutex_);
-        sending_header = packet_;
-        packet_.p.pixelpusher.delta_sequence = 0;
+        MutexLock l(&mutex_);  // protect with stable delta sequnce.
+
+        uint8_t *dest = discovery_packet_buffer_;
+        memcpy(dest, &header_, sizeof(header_));
+        dest += sizeof(header_);
+
+        // This part is dynamic length.
+        memcpy(dest, pixel_pusher_.base, pixel_pusher_base_size_);
+        dest += pixel_pusher_base_size_;
+
+        memcpy(dest, &pixel_pusher_.ext, sizeof(pixel_pusher_.ext));
+        pixel_pusher_.base->delta_sequence = 0;
       }
-      if (sendto(s, &sending_header, sizeof(sending_header), 0,
+      if (sendto(s, discovery_packet_buffer_, discovery_packet_size_, 0,
                  (struct sockaddr *) &addr, sizeof(addr)) < 0) {
         perror("Broadcasting problem");
       }
@@ -210,12 +233,16 @@ public:
   }
 
 private:
+  const DiscoveryPacketHeader header_;
+  PixelPusherContainer pixel_pusher_;
+  const int pixel_pusher_base_size_;
+  const int discovery_packet_size_;
+  uint8_t *discovery_packet_buffer_;
   Mutex mutex_;
   uint32_t previous_sequence_;
-  DiscoveryPacket packet_;
 };
 
-class PacketReceiver : public ShutdownThread {
+class PacketReceiver : public StoppableThread {
 public:
   PacketReceiver(Canvas *c, Beacon *beacon) : matrix_(c), beacon_(beacon) {
   }
@@ -302,11 +329,11 @@ private:
 };
 
 int main(int argc, char *argv[]) {
+  bool do_gamma = false;
   // Init RGB matrix
   GPIO io;
   if (!io.Init())
     return 1;
-  Canvas *canvas = new LargeSquare64x64Canvas(new RGBMatrix(&io, 32, 4));
 
   // Init PixelPusher protocol
   DiscoveryPacketHeader header;
@@ -319,26 +346,49 @@ int main(int argc, char *argv[]) {
   header.protocol_version = 1;  // ?
   header.vendor_id = 3;  // h.zeller@acm.org
   header.product_id = 0;
+  header.sw_revision = kSoftwareRevision;
   header.link_speed = 10000000;  // 10MBit
 
-  PixelPusher pixel_pusher;
-  memset(&pixel_pusher, 0, sizeof(pixel_pusher));
-  pixel_pusher.strips_attached = canvas->height();
-  pixel_pusher.pixels_per_strip = canvas->width();
+  RGBMatrix *matrix = new RGBMatrix(&io, 32, 4);
+  matrix->set_gamma_correct(do_gamma);
+  matrix->SetPWMBits(4);
+
+  Canvas *canvas = matrix;
+
+  // Let's map this matrix to a 64x64 one.
+  canvas = new LargeSquare64x64Canvas(canvas);
+
+  const int number_of_strips = canvas->height();
+  const int pixels_per_strip = canvas->width();
+
+  PixelPusherContainer pixel_pusher_container;
+  memset(&pixel_pusher_container, 0, sizeof(pixel_pusher_container));
+  size_t base_size = CalcPixelPusherBaseSize(number_of_strips);
+  pixel_pusher_container.base = (struct PixelPusherBase*) calloc(1, base_size);
+  pixel_pusher_container.base->strips_attached = number_of_strips;
+  pixel_pusher_container.base->pixels_per_strip = pixels_per_strip;
   static const int kUsablePacketSize = kMaxUDPPacketSize - 4; // 4 bytes seq#
   // Whatever fits in one packet, but not more than one 'frame'.
-  pixel_pusher.max_strips_per_packet
-    = std::min(kUsablePacketSize / (1 + 3 * pixel_pusher.pixels_per_strip),
-               (int) pixel_pusher.strips_attached);
+  pixel_pusher_container.base->max_strips_per_packet
+      = std::min(kUsablePacketSize / (1 + 3 * pixels_per_strip),
+                 number_of_strips);
   fprintf(stderr, "Accepting max %d strips per packet.\n",
-          pixel_pusher.max_strips_per_packet);
-  pixel_pusher.power_total = 1;         // ?
-  pixel_pusher.update_period = 1000;    // Some initial assumption.
-  pixel_pusher.controller_ordinal = 0;  // make configurable.
-  pixel_pusher.group_ordinal = 0;       // make configurable.
+          pixel_pusher_container.base->max_strips_per_packet);
+  pixel_pusher_container.base->power_total = 1;         // ?
+  pixel_pusher_container.base->update_period = 1000;   // initial assumption.
+  pixel_pusher_container.base->controller_ordinal = 0;  // TODO: provide config
+  pixel_pusher_container.base->group_ordinal = 0;       // TODO: provide config
+  pixel_pusher_container.base->my_port = kPixelPusherListenPort;
+  for (int i = 0; i < number_of_strips; ++i) {
+      pixel_pusher_container.base->strip_flags[i]
+        = (do_gamma ? SFLAG_LOGARITHMIC : 0);
+  }
+  pixel_pusher_container.ext.pusher_flags = 0;
+  pixel_pusher_container.ext.segments = 1;    // ?
+  pixel_pusher_container.ext.power_domain = 0;
 
   // Create our threads.
-  Beacon *discovery_beacon = new Beacon(header, pixel_pusher);
+  Beacon *discovery_beacon = new Beacon(header, pixel_pusher_container);
   PacketReceiver *receiver = new PacketReceiver(canvas, discovery_beacon);
 
   receiver->Start(0);         // fairly low priority
@@ -350,6 +400,9 @@ int main(int argc, char *argv[]) {
 
   delete discovery_beacon;
   //delete receiver;    // recvfrom() blocking; don't care for now.
+  free(pixel_pusher_container.base);
+
+  delete canvas;
 
   return 0;
 }
