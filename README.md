@@ -8,7 +8,7 @@ Code is (c) Henner Zeller <h.zeller@acm.org>,
 license: GNU General Public License, Version 3.0
 
 For details of the RGB Matrix library used and how to connect,
-see the github over at [Rasberry Pi RGB Matrix][rgb-matrix-lib].
+see the github over at [Raspberry Pi RGB Matrix][rgb-matrix-lib].
 
 We are using four boards are daisy-chained 'around the corner', see
 beginning of the video.
@@ -17,8 +17,8 @@ beginning of the video.
 
 Compiling
 ---------
-This project contains the RGB matrix as submodule. So after you have cloned
-this library, call:
+This project contains the RGB matrix library as submodule. So after you have
+cloned this library, call:
 
     git submodule init
 	git submodule update
