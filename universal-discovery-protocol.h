@@ -10,6 +10,12 @@
 
 #include <stdint.h>
 
+#ifdef __GNUC__
+# define PACKED __attribute__((__packed__))
+#else
+# define PACKED
+#endif
+
 #define SFLAG_RGBOW          (1<<0)  // High CRI strip
 #define SFLAG_WIDEPIXELS     (1<<1)  // 48 Bit/pixel RGBrgb
 #define SFLAG_LOGARITHMIC    (1<<2)  // LED has logarithmic response.
@@ -41,17 +47,19 @@ struct PixelPusherBase {
     uint16_t artnet_channel;
     uint16_t my_port;
     // The following has a dynamic length: max(8, strips_attached). So this
-    // PixelPusherBase can grow beyond its limits.
+    // PixelPusherBase can grow beyond its limits. For the dynamic case, we
+    // just allocate more and write beyond the 8
     uint8_t strip_flags[8];     // flags for each strip, for up to eight strips
-};
+} PACKED;
 
 struct PixelPusherExt {
+    uint16_t padding_;          // The following is read by 32+stripFlagSize
     uint32_t pusher_flags;      // flags for the whole pusher
     uint32_t segments;          // number of segments in each strip
     uint32_t power_domain;      // power domain of this pusher
     uint8_t last_driven_ip[4];  // last host to drive this pusher
     uint16_t last_driven_port;  // source port of last update
-};
+} PACKED;
 
 struct PixelPusherContainer {
     struct PixelPusherBase *base;  // dynamically sized.
@@ -64,7 +72,7 @@ static inline size_t CalcPixelPusherBaseSize(int num_strips) {
 typedef struct StaticSizePixelPusher {
     struct PixelPusherBase base;   // Good for up to 8 strips.
     struct PixelPusherExt  ext;
-} PixelPusher1213;
+} PACKED PixelPusher;
 
 typedef struct LumiaBridge {
     // placekeeper
@@ -85,7 +93,7 @@ typedef struct EtherDream {
 } EtherDream;
 
 typedef union {
-    //    PixelPusher pixelpusher;
+    PixelPusher pixelpusher;
     LumiaBridge lumiabridge;
     EtherDream etherdream;
 } Particulars;
@@ -100,7 +108,7 @@ typedef struct DiscoveryPacketHeader {
     uint16_t hw_revision;
     uint16_t sw_revision;
     uint32_t link_speed;    // in bits per second
-} DiscoveryPacketHeader;
+} PACKED DiscoveryPacketHeader;
 
 typedef struct DiscoveryPacket {
     DiscoveryPacketHeader header;

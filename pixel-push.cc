@@ -16,9 +16,10 @@
 //  You should have received a copy of the GNU General Public License
 //  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-#include <algorithm>
 #include <arpa/inet.h>
 #include <assert.h>
+#include <getopt.h>
+#include <limits.h>
 #include <linux/netdevice.h>
 #include <netinet/in.h>
 #include <stdint.h>
@@ -32,6 +33,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include <algorithm>
+
 #include "led-matrix.h"
 #include "thread.h"
 #include "universal-discovery-protocol.h"
@@ -40,7 +43,7 @@ using namespace rgb_matrix;
 
 static const char kNetworkInterface[] = "eth0";
 static const uint16_t kPixelPusherDiscoveryPort = 7331;
-static const uint16_t kPixelPusherListenPort = 9897;
+static const uint16_t kPixelPusherListenPort = 5078;
 static const uint8_t kSoftwareRevision = 122;
 
 // The maximum packet size we accept.
@@ -148,10 +151,20 @@ bool DetermineNetwork(const char *interface, DiscoveryPacketHeader *header) {
 class StoppableThread : public Thread {
 public:
   StoppableThread() : running_(true) {}
-  virtual ~StoppableThread() { running_ = false; }
+  virtual ~StoppableThread() { Stop(); }
+
+  // Cause stopping wait until we're done.
+  void Stop() {
+    MutexLock l(&run_mutex_);
+    running_ = false;
+  }
 
 protected:
-  volatile bool running_;  // TODO: use mutex, but this is good enough for now.
+  bool running() { MutexLock l(&run_mutex_); return running_; }
+
+private:
+  Mutex run_mutex_;
+  bool running_;
 };
 
 // Broadcast every second the discovery protocol.
@@ -165,13 +178,13 @@ public:
       discovery_packet_size_(sizeof(header_)
                              + pixel_pusher_base_size_
                              + sizeof(pixel_pusher_.ext)),
-      //discovery_packet_buffer_(new uint8_t[discovery_packet_size_]),
+      discovery_packet_buffer_(new uint8_t[discovery_packet_size_]),
       previous_sequence_(-1) {
-    fprintf(stderr, "packet size: %zd\n", discovery_packet_size_);
-    discovery_packet_buffer_ = new uint8_t[discovery_packet_size_];
+    fprintf(stderr, "discovery packet size: %zd\n", discovery_packet_size_);
   }
   
   virtual ~Beacon() {
+    Stop();
     delete [] discovery_packet_buffer_;
   }
 
@@ -208,7 +221,7 @@ public:
     fprintf(stderr, "Starting PixelPusher discovery beacon "
             "broadcasting to port %d\n", kPixelPusherDiscoveryPort);
     struct timespec sleep_time = { 1, 0 };  // todo: tweak.
-    while (running_) {
+    while (running()) {
       // The header is of type 'DiscoveryPacket'.
       {
         MutexLock l(&mutex_);  // protect with stable delta sequnce.
@@ -277,9 +290,11 @@ public:
     }
     fprintf(stderr, "Listening for pixels pushed to port %d\n",
             kPixelPusherListenPort);
-    while (running_) {
+    while (running()) {
       ssize_t buffer_bytes = recvfrom(s, packet_buffer, kMaxUDPPacketSize,
                                       0, NULL, 0);
+      if (!running())
+        break;
       const int64_t start_time = CurrentTimeMicros();
       if (buffer_bytes < 0) {
         perror("receive problem");
@@ -328,12 +343,70 @@ private:
   Beacon *const beacon_;
 };
 
+static int usage(const char *progname) {
+  fprintf(stderr, "usage: %s <options>\n", progname);
+  fprintf(stderr, "Options:\n"
+          "\t-r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. "
+          "Default: 32\n"
+          "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
+          "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
+          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..7\n"
+          "\t-g            : Do gamma correction (experimental)\n"
+          "\t-d            : run as daemon. Use this when starting in\n"
+          "\t                /etc/init.d, but also when running without\n"
+          "\t                terminal (e.g. cron).\n");
+  return 1;
+}
+
 int main(int argc, char *argv[]) {
   bool do_gamma = false;
+  bool large_display = false;  // 64x64
+  bool as_daemon = false;
+  int pwm_bits = -1;
+  int rows = 32;
+  int chain = 1;
+  
+  int opt;
+  while ((opt = getopt(argc, argv, "dgLc:r:")) != -1) {
+    switch (opt) {
+    case 'd':
+      as_daemon = true;
+      break;
+    case 'g':
+      do_gamma = true;
+      break;
+    case 'L':
+      rows = 32;
+      chain = 4;
+      large_display = true;
+      break;
+    case 'c':
+      chain = atoi(optarg);
+      break;
+    case 'r':
+      rows = atoi(optarg);
+      break;
+    case 'p':
+      pwm_bits = atoi(optarg);
+      break;
+    default:
+      return usage(argv[0]);
+    }
+  }
+
   // Init RGB matrix
   GPIO io;
   if (!io.Init())
     return 1;
+
+  // Start daemon before we start any threads.
+  if (as_daemon) {
+    if (fork() != 0)
+      return 0;
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+  }
 
   // Init PixelPusher protocol
   DiscoveryPacketHeader header;
@@ -349,14 +422,19 @@ int main(int argc, char *argv[]) {
   header.sw_revision = kSoftwareRevision;
   header.link_speed = 10000000;  // 10MBit
 
-  RGBMatrix *matrix = new RGBMatrix(&io, 32, 4);
+  RGBMatrix *matrix = new RGBMatrix(&io, rows, chain);
+  if (pwm_bits > 0 && !matrix->SetPWMBits(pwm_bits)) {
+    fprintf(stderr, "Invalid range of pwm-bits");
+    return 1;
+  }
   matrix->set_gamma_correct(do_gamma);
-  matrix->SetPWMBits(4);
 
   Canvas *canvas = matrix;
 
-  // Let's map this matrix to a 64x64 one.
-  canvas = new LargeSquare64x64Canvas(canvas);
+  if (large_display) {
+    // Let's map this matrix to a 64x64 one.
+    canvas = new LargeSquare64x64Canvas(canvas);
+  }
 
   const int number_of_strips = canvas->height();
   const int pixels_per_strip = canvas->width();
@@ -364,7 +442,8 @@ int main(int argc, char *argv[]) {
   PixelPusherContainer pixel_pusher_container;
   memset(&pixel_pusher_container, 0, sizeof(pixel_pusher_container));
   size_t base_size = CalcPixelPusherBaseSize(number_of_strips);
-  pixel_pusher_container.base = (struct PixelPusherBase*) calloc(1, base_size);
+  pixel_pusher_container.base = (struct PixelPusherBase*) malloc(base_size);
+  memset(pixel_pusher_container.base, 0, base_size);
   pixel_pusher_container.base->strips_attached = number_of_strips;
   pixel_pusher_container.base->pixels_per_strip = pixels_per_strip;
   static const int kUsablePacketSize = kMaxUDPPacketSize - 4; // 4 bytes seq#
@@ -372,7 +451,10 @@ int main(int argc, char *argv[]) {
   pixel_pusher_container.base->max_strips_per_packet
       = std::min(kUsablePacketSize / (1 + 3 * pixels_per_strip),
                  number_of_strips);
-  fprintf(stderr, "Accepting max %d strips per packet.\n",
+  fprintf(stderr, "Display: %dx%d (%d pixels each on %d strips)\n"
+          "Accepting max %d strips per packet.\n",
+          pixels_per_strip, number_of_strips,
+          pixels_per_strip, number_of_strips, 
           pixel_pusher_container.base->max_strips_per_packet);
   pixel_pusher_container.base->power_total = 1;         // ?
   pixel_pusher_container.base->update_period = 1000;   // initial assumption.
@@ -394,13 +476,26 @@ int main(int argc, char *argv[]) {
   receiver->Start(0);         // fairly low priority
   discovery_beacon->Start(5); // This should accurately send updates.
 
-  printf("Press <RETURN> to shut down.\n");
-  getchar();  // for now, run until <RETURN>
-  printf("shutting down\n");
+  if (as_daemon) {
+    for(;;) sleep(INT_MAX);
+  } else {
+    printf("Press <RETURN> to shut down.\n");
+    getchar();  // for now, run until <RETURN>
+    printf("shutting down\n");
+  }
 
+  receiver->Stop();
+  discovery_beacon->Stop();
+
+#if 0
+  // TODO: Receiver is blocking in recvfrom(), so we can't reliably force
+  // shut down while waiting on that.
+  // .. and everything else references that.
+  // Don't care, just leak to the end.
+  delete receiver;
   delete discovery_beacon;
-  //delete receiver;    // recvfrom() blocking; don't care for now.
   free(pixel_pusher_container.base);
+#endif
 
   delete canvas;
 

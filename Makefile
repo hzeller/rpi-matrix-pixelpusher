@@ -16,6 +16,7 @@ pixel-push : $(OBJECTS) $(RGB_LIBRARY)
 $(RGB_LIBRARY):
 	$(MAKE) -C $(RGB_LIBDIR)
 
+pixel-push.o : pixel-push.cc universal-discovery-protocol.h
 %.o : %.cc
 	$(CXX) -I$(RGB_INCDIR) $(CXXFLAGS) -c -o $@ $<
 
