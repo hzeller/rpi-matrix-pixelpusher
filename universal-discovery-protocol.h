@@ -10,14 +10,18 @@
 
 #include <stdint.h>
 
-#define SFLAG_RGBOW (1<<0)
-#define SFLAG_WIDEPIXELS (1<<1)
-#define SFLAG_LOGARITHMIC (1<<2)
-#define SFLAG_MOTION (1<<3)
-#define SFLAG_NOTIDEMPOTENT (1<<4)
+enum StripFlagConstants {
+    SFLAG_RGBOW         = (1<<0),  // High CRI strip
+    SFLAG_WIDEPIXELS    = (1<<1),  // 48 Bit/pixel RGBrgb
+    SFLAG_LOGARITHMIC   = (1<<2),  // LED has logarithmic response.
+    SFLAG_MOTION        = (1<<3),  // A motion controller.
+    SFLAG_NOTIDEMPOTENT = (1<<4),  // motion controller with side-effects.
+};
 
-#define PFLAG_PROTECTED (1<<0)
-#define PFLAG_FIXEDSIZE (1<<1)
+enum PusherFlagConstants {
+    PFLAG_PROTECTED = (1<<0),   // require qualified registry.getStrips() call.
+    PFLAG_FIXEDSIZE = (1<<1),   // Requires every datagram same size.
+};
 
 typedef enum DeviceType {
     ETHERDREAM = 0,
@@ -37,6 +41,7 @@ typedef struct PixelPusher {
     uint16_t artnet_universe;   // configured artnet starting point for this controller
     uint16_t artnet_channel;
     uint16_t my_port;
+    // The following has a dynamic length: max(8, strips_attached).
     uint8_t strip_flags[8];     // flags for each strip, for up to eight strips
     uint32_t pusher_flags;      // flags for the whole pusher
     uint32_t segments;          // number of segments in each strip
