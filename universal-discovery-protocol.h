@@ -10,18 +10,14 @@
 
 #include <stdint.h>
 
-enum StripFlagConstants {
-    SFLAG_RGBOW         = (1<<0),  // High CRI strip
-    SFLAG_WIDEPIXELS    = (1<<1),  // 48 Bit/pixel RGBrgb
-    SFLAG_LOGARITHMIC   = (1<<2),  // LED has logarithmic response.
-    SFLAG_MOTION        = (1<<3),  // A motion controller.
-    SFLAG_NOTIDEMPOTENT = (1<<4),  // motion controller with side-effects.
-};
+#define SFLAG_RGBOW          (1<<0)  // High CRI strip
+#define SFLAG_WIDEPIXELS     (1<<1)  // 48 Bit/pixel RGBrgb
+#define SFLAG_LOGARITHMIC    (1<<2)  // LED has logarithmic response.
+#define SFLAG_MOTION         (1<<3)  // A motion controller.
+#define SFLAG_NOTIDEMPOTENT  (1<<4)  // motion controller with side-effects.
 
-enum PusherFlagConstants {
-    PFLAG_PROTECTED = (1<<0),   // require qualified registry.getStrips() call.
-    PFLAG_FIXEDSIZE = (1<<1),   // Requires every datagram same size.
-};
+#define PFLAG_PROTECTED (1<<0) // require qualified registry.getStrips() call.
+#define PFLAG_FIXEDSIZE (1<<1) // Requires every datagram same size.
 
 typedef enum DeviceType {
     ETHERDREAM = 0,
