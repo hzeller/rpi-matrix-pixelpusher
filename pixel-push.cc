@@ -248,8 +248,8 @@ public:
 private:
   const DiscoveryPacketHeader header_;
   PixelPusherContainer pixel_pusher_;
-  const int pixel_pusher_base_size_;
-  const int discovery_packet_size_;
+  const size_t pixel_pusher_base_size_;
+  const size_t discovery_packet_size_;
   uint8_t *discovery_packet_buffer_;
   Mutex mutex_;
   uint32_t previous_sequence_;
