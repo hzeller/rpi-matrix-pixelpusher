@@ -9,18 +9,22 @@
 #define PIXELPUSHER_UNIVERSAL_DISCOVERY_PROTOCOL_H
 
 #include <stdint.h>
- 
+
 #define SFLAG_RGBOW (1<<0)
 #define SFLAG_WIDEPIXELS (1<<1)
- 
+#define SFLAG_LOGARITHMIC (1<<2)
+#define SFLAG_MOTION (1<<3)
+#define SFLAG_NOTIDEMPOTENT (1<<4)
+
 #define PFLAG_PROTECTED (1<<0)
- 
+#define PFLAG_FIXEDSIZE (1<<1)
+
 typedef enum DeviceType {
     ETHERDREAM = 0,
     LUMIABRIDGE = 1,
     PIXELPUSHER = 2
 } DeviceType;
- 
+
 typedef struct PixelPusher {
     uint8_t  strips_attached;
     uint8_t  max_strips_per_packet;
@@ -36,12 +40,15 @@ typedef struct PixelPusher {
     uint8_t strip_flags[8];     // flags for each strip, for up to eight strips
     uint32_t pusher_flags;      // flags for the whole pusher
     uint32_t segments;          // number of segments in each strip
+    uint32_t power_domain;      // power domain of this pusher
+    uint8_t last_driven_ip[4];  // last host to drive this pusher
+    uint16_t last_driven_port;  // source port of last update
 } PixelPusher;
- 
+
 typedef struct LumiaBridge {
     // placekeeper
 } LumiaBridge;
- 
+
 typedef struct EtherDream {
     uint16_t buffer_capacity;
     uint32_t max_point_rate;
@@ -55,13 +62,13 @@ typedef struct EtherDream {
     uint32_t point_rate;                // current point playback rate
     uint32_t point_count;           //  # points played
 } EtherDream;
- 
+
 typedef union {
     PixelPusher pixelpusher;
     LumiaBridge lumiabridge;
     EtherDream etherdream;
 } Particulars;
- 
+
 typedef struct DiscoveryPacketHeader {
     uint8_t mac_address[6];
     uint8_t ip_address[4];  // network byte order
@@ -73,7 +80,7 @@ typedef struct DiscoveryPacketHeader {
     uint16_t sw_revision;
     uint32_t link_speed;    // in bits per second
 } DiscoveryPacketHeader;
- 
+
 typedef struct DiscoveryPacket {
     DiscoveryPacketHeader header;
     Particulars p;
