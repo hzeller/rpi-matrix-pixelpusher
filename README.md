@@ -39,7 +39,7 @@ These are the available options
                          terminal (e.g. cron).
 
 This will advertise itself as a
-PixelPusher <http://forum.heroicrobotics.com/board/5/pixelpusher> device
+PixelPusher <http://heroicrobotics.boards.net/board/5/pixelpusher> device
 on the network. Number of 'strips' will be number of rows, so 16 or 32
 (or, in the case of the 'Large' (Option `-L`) display, 64)
 The strip-length is 32 * chained (64 for the `-L` display).
