@@ -70,9 +70,9 @@ public:
   }
   virtual ~LargeSquare64x64Canvas() { delete delegatee_; }
 
-  virtual void ClearScreen() { delegatee_->ClearScreen(); }
-  virtual void FillScreen(uint8_t red, uint8_t green, uint8_t blue) {
-    delegatee_->FillScreen(red, green, blue);
+  virtual void Clear() { delegatee_->Clear(); }
+  virtual void Fill(uint8_t red, uint8_t green, uint8_t blue) {
+    delegatee_->Fill(red, green, blue);
   }
   virtual int width() const { return 64; }
   virtual int height() const { return 64; }
@@ -350,8 +350,8 @@ static int usage(const char *progname) {
           "Default: 32\n"
           "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
           "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
-          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..7\n"
-          "\t-g            : Do gamma correction (experimental)\n"
+          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n"
+          "\t-l            : Switch off luminance correction.\n"
           "\t-d            : run as daemon. Use this when starting in\n"
           "\t                /etc/init.d, but also when running without\n"
           "\t                terminal (e.g. cron).\n");
@@ -359,7 +359,7 @@ static int usage(const char *progname) {
 }
 
 int main(int argc, char *argv[]) {
-  bool do_gamma = false;
+  bool do_luminance_correct = true;
   bool large_display = false;  // 64x64
   bool as_daemon = false;
   int pwm_bits = -1;
@@ -367,13 +367,13 @@ int main(int argc, char *argv[]) {
   int chain = 1;
   
   int opt;
-  while ((opt = getopt(argc, argv, "dgLc:r:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLc:r:p:")) != -1) {
     switch (opt) {
     case 'd':
       as_daemon = true;
       break;
-    case 'g':
-      do_gamma = true;
+    case 'l':
+      do_luminance_correct = !do_luminance_correct;
       break;
     case 'L':
       rows = 32;
@@ -427,7 +427,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Invalid range of pwm-bits");
     return 1;
   }
-  matrix->set_gamma_correct(do_gamma);
+  matrix->set_luminance_correct(do_luminance_correct);
 
   Canvas *canvas = matrix;
 
@@ -463,7 +463,7 @@ int main(int argc, char *argv[]) {
   pixel_pusher_container.base->my_port = kPixelPusherListenPort;
   for (int i = 0; i < number_of_strips; ++i) {
       pixel_pusher_container.base->strip_flags[i]
-        = (do_gamma ? SFLAG_LOGARITHMIC : 0);
+        = (do_luminance_correct ? SFLAG_LOGARITHMIC : 0);
   }
   pixel_pusher_container.ext.pusher_flags = 0;
   pixel_pusher_container.ext.segments = 1;    // ?
@@ -479,7 +479,7 @@ int main(int argc, char *argv[]) {
   if (as_daemon) {
     for(;;) sleep(INT_MAX);
   } else {
-    printf("Press <RETURN> to shut down.\n");
+    printf("Press <RETURN> to shut down (supply -d option to run as daemon)\n");
     getchar();  // for now, run until <RETURN>
     printf("shutting down\n");
   }
