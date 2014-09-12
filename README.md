@@ -16,7 +16,7 @@ This project contains the RGB matrix library as submodule. So after you have
 cloned this project, call:
 
     git submodule init
-	git submodule update
+    git submodule update
 	
 Running
 -------
