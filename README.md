@@ -12,11 +12,10 @@ see the github over at [Raspberry Pi RGB Matrix][rgb-matrix-lib].
 
 Compiling
 ---------
-This project contains the RGB matrix library as submodule. So after you have
-cloned this project, call:
+Clone with `--recursive` to get the RGB matrix submodule when cloning
+this repository:
 
-    git submodule init
-    git submodule update
+    git clone --recursive https://github.com/hzeller/rpi-matrix-pixelpusher.git
 	
 Running
 -------
