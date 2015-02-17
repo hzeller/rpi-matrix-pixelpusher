@@ -116,7 +116,7 @@ bool DetermineNetwork(const char *interface, DiscoveryPacketHeader *header) {
       memcpy(header->mac_address,  mac_addr_query.ifr_hwaddr.sa_data,
              sizeof(header->mac_address));
     } else {
-      perror("getting hardware address");
+      perror("Getting hardware address");
       success = false;
     }
   }
@@ -128,7 +128,7 @@ bool DetermineNetwork(const char *interface, DiscoveryPacketHeader *header) {
       struct sockaddr_in *s_in = (struct sockaddr_in *) &ip_addr_query.ifr_addr;
       memcpy(header->ip_address, &s_in->sin_addr, sizeof(header->ip_address));
     } else {
-      perror("getting IP address");
+      perror("Getting IP address");
       success = false;
     }
   }
@@ -138,7 +138,7 @@ bool DetermineNetwork(const char *interface, DiscoveryPacketHeader *header) {
   // Let's print what we're sending.
   char buf[256];
   inet_ntop(AF_INET, header->ip_address, buf, sizeof(buf));
-  fprintf(stderr, "IP: %s; MAC: ", buf);
+  fprintf(stderr, "%s: IP: %s; MAC: ", interface, buf);
   for (int i = 0; i < 6; ++i) {
     fprintf(stderr, "%s%02x", (i == 0) ? "" : ":", header->mac_address[i]);
   }
@@ -352,6 +352,8 @@ static int usage(const char *progname) {
           "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
           "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n"
           "\t-l            : Switch off luminance correction.\n"
+          "\t-i <iface>    : network interface, such as eth0, wlan0. "
+          "Default eth0\n"
           "\t-d            : run as daemon. Use this when starting in\n"
           "\t                /etc/init.d, but also when running without\n"
           "\t                terminal (e.g. cron).\n");
@@ -365,9 +367,10 @@ int main(int argc, char *argv[]) {
   int pwm_bits = -1;
   int rows = 32;
   int chain = 1;
-  
+  const char *interface = kNetworkInterface;
+
   int opt;
-  while ((opt = getopt(argc, argv, "dlLc:r:p:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLc:r:p:i:")) != -1) {
     switch (opt) {
     case 'd':
       as_daemon = true;
@@ -388,6 +391,9 @@ int main(int argc, char *argv[]) {
       break;
     case 'p':
       pwm_bits = atoi(optarg);
+      break;
+    case 'i':
+      interface = strdup(optarg);
       break;
     default:
       return usage(argv[0]);
@@ -412,7 +418,9 @@ int main(int argc, char *argv[]) {
   DiscoveryPacketHeader header;
   memset(&header, 0, sizeof(header));
 
-  if (!DetermineNetwork(kNetworkInterface, &header)) {
+  if (!DetermineNetwork(interface, &header)) {
+    fprintf(stderr, "Couldn't listen on network interface %s. "
+            "Change with -i <iface>\n", interface);
     return 1;
   }
   header.device_type = PIXELPUSHER;
