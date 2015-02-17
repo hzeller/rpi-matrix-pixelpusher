@@ -31,11 +31,12 @@ These are the available options
          -r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. Default: 32
          -c <chained>  : Daisy-chained boards. Default: 1.
          -L            : 'Large' display, composed out of 4 times 32x32
-         -p <pwm-bits> : Bits used for PWM. Something between 1..7
-         -g            : Do gamma correction (experimental)
+         -p <pwm-bits> : Bits used for PWM. Something between 1..11
+         -l            : Switch off luminance correction.
+         -i <iface>    : network interface, such as eth0, wlan0. Default eth0
          -d            : run as daemon. Use this when starting in
-                         /etc/init.d, but also when running without
-                         terminal (e.g. cron).
+                        /etc/init.d, but also when running without
+                        terminal (e.g. cron).
 
 This will advertise itself as a
 PixelPusher <http://heroicrobotics.boards.net/board/5/pixelpusher> device
