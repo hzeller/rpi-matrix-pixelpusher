@@ -45,6 +45,10 @@ static const char kNetworkInterface[] = "eth0";
 static const uint16_t kPixelPusherDiscoveryPort = 7331;
 static const uint16_t kPixelPusherListenPort = 5078;
 static const uint8_t kSoftwareRevision = 122;
+static const uint8_t kPixelPusherCommandMagic[16] = {0x40, 0x09, 0x2d, 0xa6,
+                                                     0x15, 0xa5, 0xdd, 0xe5,
+                                                     0x6a, 0x9d, 0x4d, 0x5a,
+                                                     0xcf, 0x09, 0xaf, 0x50};
 
 // The maximum packet size we accept.
 // Typicall, the PixelPusher network will attempt to send smaller,
@@ -311,6 +315,13 @@ public:
       memcpy(&sequence, buf_pos, sizeof(sequence));
       buffer_bytes -= 4;
       buf_pos += 4;
+
+      if (buffer_bytes >= (int)sizeof(kPixelPusherCommandMagic)
+          && memcmp(buf_pos, kPixelPusherCommandMagic,
+                    sizeof(kPixelPusherCommandMagic)) == 0) {
+        // Ignore pusher command.
+        continue;
+      }
 
       if (buffer_bytes % strip_data_len != 0) {
         fprintf(stderr, "Expecting multiple of {1 + (rgb)*%d} = %d, "
