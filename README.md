@@ -30,6 +30,7 @@ These are the available options
      Options:
          -r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. Default: 32
          -c <chained>  : Daisy-chained boards. Default: 1.
+	 -P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.
          -L            : 'Large' display, composed out of 4 times 32x32
          -p <pwm-bits> : Bits used for PWM. Something between 1..11
          -l            : Switch off luminance correction.
