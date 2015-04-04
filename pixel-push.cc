@@ -320,6 +320,7 @@ public:
           && memcmp(buf_pos, kPixelPusherCommandMagic,
                     sizeof(kPixelPusherCommandMagic)) == 0) {
         // Ignore pusher command.
+	//fprintf(stderr, "Ignore pusher command.\n");
         continue;
       }
 
@@ -360,6 +361,7 @@ static int usage(const char *progname) {
           "\t-r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. "
           "Default: 32\n"
           "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
+          "\t-P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.\n"
           "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
           "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n"
           "\t-l            : Switch off luminance correction.\n"
@@ -378,10 +380,11 @@ int main(int argc, char *argv[]) {
   int pwm_bits = -1;
   int rows = 32;
   int chain = 1;
+  int parallel = 1;
   const char *interface = kNetworkInterface;
 
   int opt;
-  while ((opt = getopt(argc, argv, "dlLc:r:p:i:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:")) != -1) {
     switch (opt) {
     case 'd':
       as_daemon = true;
@@ -393,6 +396,9 @@ int main(int argc, char *argv[]) {
       rows = 32;
       chain = 4;
       large_display = true;
+      break;
+    case 'P':
+      parallel = atoi(optarg);
       break;
     case 'c':
       chain = atoi(optarg);
@@ -409,6 +415,30 @@ int main(int argc, char *argv[]) {
     default:
       return usage(argv[0]);
     }
+  }
+
+  // Some parameter checks.
+  if (getuid() != 0) {
+    fprintf(stderr, "Must run as root to be able to access /dev/mem\n"
+            "Prepend 'sudo' to the command:\n\tsudo %s ...\n", argv[0]);
+    return 1;
+  }
+
+  if (rows != 16 && rows != 32) {
+    fprintf(stderr, "Rows can either be 16 or 32\n");
+    return 1;
+  }
+
+  if (chain < 1) {
+    fprintf(stderr, "Chain outside usable range\n");
+    return 1;
+  }
+  if (chain > 8) {
+    fprintf(stderr, "That is a long chain. Expect some flicker.\n");
+  }
+  if (parallel < 1 || parallel > 3) {
+    fprintf(stderr, "Parallel outside usable range.\n");
+    return 1;
   }
 
   // Init RGB matrix
@@ -441,7 +471,7 @@ int main(int argc, char *argv[]) {
   header.sw_revision = kSoftwareRevision;
   header.link_speed = 10000000;  // 10MBit
 
-  RGBMatrix *matrix = new RGBMatrix(&io, rows, chain);
+  RGBMatrix *matrix = new RGBMatrix(&io, rows, chain, parallel);
   if (pwm_bits > 0 && !matrix->SetPWMBits(pwm_bits)) {
     fprintf(stderr, "Invalid range of pwm-bits");
     return 1;
