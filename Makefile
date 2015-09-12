@@ -13,7 +13,7 @@ all : pixel-push
 pixel-push : $(OBJECTS) $(RGB_LIBRARY)
 	$(CXX) $(CXXFLAGS) $(OBJECTS) -o $@ $(LDFLAGS)
 
-$(RGB_LIBRARY):
+$(RGB_LIBRARY): FORCE
 	$(MAKE) -C $(RGB_LIBDIR)
 
 pixel-push.o : pixel-push.cc universal-discovery-protocol.h
@@ -23,3 +23,6 @@ pixel-push.o : pixel-push.cc universal-discovery-protocol.h
 clean:
 	rm -f $(OBJECTS) $(BINARIES)
 	$(MAKE) -C $(RGB_LIBDIR) clean
+
+FORCE:
+.PHONY: FORCE

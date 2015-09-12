@@ -2,7 +2,7 @@
 //  PixelPusher protocol implementation for LED matrix
 //
 //  Copyright (C) 2013 Henner Zeller <h.zeller@acm.org>
-//    
+//
 //  This program is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
 //  the Free Software Foundation; either version 3 of the License, or
@@ -32,7 +32,6 @@
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 #include <algorithm>
 
 #include "led-matrix.h"
@@ -54,7 +53,8 @@ static const uint8_t kPixelPusherCommandMagic[16] = {0x40, 0x09, 0x2d, 0xa6,
 // Typicall, the PixelPusher network will attempt to send smaller,
 // non-fragmenting packets of size 1460; however, we would accept up to
 // the UDP packet size.
-static const int kMaxUDPPacketSize = 65507;
+static const int kMaxUDPPacketSize = 65535;
+static const int kDefaultUDPPacketSize = 1460;
 
 // Say we want 60Hz update and 9 packets per frame (7 strips / packet), we
 // don't really need more update rate than this.
@@ -186,7 +186,7 @@ public:
       previous_sequence_(-1) {
     fprintf(stderr, "discovery packet size: %zd\n", discovery_packet_size_);
   }
-  
+
   virtual ~Beacon() {
     Stop();
     delete [] discovery_packet_buffer_;
@@ -276,7 +276,7 @@ public:
       uint8_t strip_index;
       Pixel pixel[0];
     };
-    
+
     int s;
     if ((s = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
       perror("creating listen socket");
@@ -349,7 +349,7 @@ public:
     }
     delete [] packet_buffer;
   }
-  
+
 private:
   Canvas *const matrix_;
   Beacon *const beacon_;
@@ -367,9 +367,9 @@ static int usage(const char *progname) {
           "\t-l            : Switch off luminance correction.\n"
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
-          "\t-d            : run as daemon. Use this when starting in\n"
-          "\t                /etc/init.d, but also when running without\n"
-          "\t                terminal (e.g. cron).\n");
+          "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
+          "\t-d            : run as daemon. Use this when starting in /etc/init.d\n",
+          kDefaultUDPPacketSize);
   return 1;
 }
 
@@ -381,10 +381,11 @@ int main(int argc, char *argv[]) {
   int rows = 32;
   int chain = 1;
   int parallel = 1;
+  int udp_packet_size = kDefaultUDPPacketSize;
   const char *interface = kNetworkInterface;
 
   int opt;
-  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:")) != -1) {
     switch (opt) {
     case 'd':
       as_daemon = true;
@@ -412,6 +413,9 @@ int main(int argc, char *argv[]) {
     case 'i':
       interface = strdup(optarg);
       break;
+    case 'u':
+      udp_packet_size = atoi(optarg);
+      break;
     default:
       return usage(argv[0]);
     }
@@ -438,6 +442,10 @@ int main(int argc, char *argv[]) {
   }
   if (parallel < 1 || parallel > 3) {
     fprintf(stderr, "Parallel outside usable range.\n");
+    return 1;
+  }
+  if (udp_packet_size < 200 || udp_packet_size > kMaxUDPPacketSize) {
+    fprintf(stderr, "UDP packet size out of range.\n");
     return 1;
   }
 
@@ -495,15 +503,21 @@ int main(int argc, char *argv[]) {
   memset(pixel_pusher_container.base, 0, base_size);
   pixel_pusher_container.base->strips_attached = number_of_strips;
   pixel_pusher_container.base->pixels_per_strip = pixels_per_strip;
-  static const int kUsablePacketSize = kMaxUDPPacketSize - 4; // 4 bytes seq#
+  static const int kUsablePacketSize = udp_packet_size - 4; // 4 bytes seq#
   // Whatever fits in one packet, but not more than one 'frame'.
   pixel_pusher_container.base->max_strips_per_packet
       = std::min(kUsablePacketSize / (1 + 3 * pixels_per_strip),
                  number_of_strips);
+  if (pixel_pusher_container.base->max_strips_per_packet == 0) {
+    fprintf(stderr, "Packet size limit (%d Bytes) smaller than needed to "
+            "transmit one row (%d Bytes). Change UDP packet size (-u <size>).\n",
+            kUsablePacketSize, (1 + 3 * pixels_per_strip));
+    return 1;
+  }
   fprintf(stderr, "Display: %dx%d (%d pixels each on %d strips)\n"
           "Accepting max %d strips per packet.\n",
           pixels_per_strip, number_of_strips,
-          pixels_per_strip, number_of_strips, 
+          pixels_per_strip, number_of_strips,
           pixel_pusher_container.base->max_strips_per_packet);
   pixel_pusher_container.base->power_total = 1;         // ?
   pixel_pusher_container.base->update_period = 1000;   // initial assumption.
