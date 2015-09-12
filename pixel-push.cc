@@ -467,11 +467,20 @@ int main(int argc, char *argv[]) {
   DiscoveryPacketHeader header;
   memset(&header, 0, sizeof(header));
 
-  if (!DetermineNetwork(interface, &header)) {
+  // We might be started in some init script and the network is
+  // not there yet. Try up to one minute.
+  int network_retries_left = 60;
+
+  while (network_retries_left && !DetermineNetwork(interface, &header)) {
+    --network_retries_left;
+    sleep(1);
+  }
+  if (!network_retries_left) {
     fprintf(stderr, "Couldn't listen on network interface %s. "
             "Change with -i <iface>\n", interface);
     return 1;
   }
+
   header.device_type = PIXELPUSHER;
   header.protocol_version = 1;  // ?
   header.vendor_id = 3;  // h.zeller@acm.org
