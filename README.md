@@ -17,6 +17,9 @@ this repository:
 
     git clone --recursive https://github.com/hzeller/rpi-matrix-pixelpusher.git
 
+(If you did a `git pull` to get the latest state, also make sure to get the latest matrix code:
+type `git submodule update`).
+
 Wiring
 ------
 For wiring, please have a look at the [library documentation][rgb-matrix-lib].
@@ -45,9 +48,10 @@ Options:
         -P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.
         -L            : 'Large' display, composed out of 4 times 32x32
         -p <pwm-bits> : Bits used for PWM. Something between 1..11
-        -l            : Switch off luminance correction.
+        -a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0
         -i <iface>    : network interface, such as eth0, wlan0. Default eth0
         -u <udp-size> : Max UDP data/packet (default 1460)
+                        Best use the maximum that works with your network (up to 65535).
         -d            : run as daemon. Use this when starting in /etc/init.d
 ```
 
@@ -78,7 +82,15 @@ Controlling Software
 You can control these for instance with the Processing framework
 <http://processing.org/>. The processing framework already has a contrib
 library section that allows you to select PixelPusher supporting libs.
+
 Another software supporting the PixelPusher support is L.E.D. Lab http://www.ledlabs.co/
+
+Artnet / sACN
+-------------
+If you use the [artnet bridge][artnet], you can specify the artnet-universe and the
+artnet-channel with the `-a` option:
+
+    sudo ./pixel-push -a1,1
 
 Large Display
 -------------
@@ -94,3 +106,4 @@ If you have a Raspberry Pi 2, consider assembling a display using parallel chain
 [rgb-matrix-lib]: https://github.com/hzeller/rpi-rgb-led-matrix
 [matrix64]: ./img/chained-64x64.jpg
 [vid]: ./img/pp-vid.jpg
+[artnet]: http://heroicrobotics.boards.net/thread/39/artnet-support-sacn

@@ -364,10 +364,11 @@ static int usage(const char *progname) {
           "\t-P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.\n"
           "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
           "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n"
-          "\t-l            : Switch off luminance correction.\n"
+          "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
           "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
+          "\t                Best use the maximum that works with your network (up to 65535).\n"
           "\t-d            : run as daemon. Use this when starting in /etc/init.d\n",
           kDefaultUDPPacketSize);
   return 1;
@@ -381,16 +382,18 @@ int main(int argc, char *argv[]) {
   int rows = 32;
   int chain = 1;
   int parallel = 1;
+  int artnet_universe = -1;
+  int artnet_channel = -1;
   int udp_packet_size = kDefaultUDPPacketSize;
   const char *interface = kNetworkInterface;
 
   int opt;
-  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:a:")) != -1) {
     switch (opt) {
     case 'd':
       as_daemon = true;
       break;
-    case 'l':
+    case 'l':   // Still supported, but not really useful.
       do_luminance_correct = !do_luminance_correct;
       break;
     case 'L':
@@ -415,6 +418,12 @@ int main(int argc, char *argv[]) {
       break;
     case 'u':
       udp_packet_size = atoi(optarg);
+      break;
+    case 'a':
+      if (2 != sscanf(optarg, "%d,%d", &artnet_universe, &artnet_channel)) {
+        fprintf(stderr, "Artnet parameters must be <universe>,<channel>\n");
+        return 1;
+      }
       break;
     default:
       return usage(argv[0]);
@@ -522,6 +531,10 @@ int main(int argc, char *argv[]) {
             "transmit one row (%d Bytes). Change UDP packet size (-u <size>).\n",
             kUsablePacketSize, (1 + 3 * pixels_per_strip));
     return 1;
+  }
+  if (artnet_universe >= 0 && artnet_channel >= 0) {
+    pixel_pusher_container.base->artnet_universe = artnet_universe;
+    pixel_pusher_container.base->artnet_channel = artnet_channel;
   }
   fprintf(stderr, "Display: %dx%d (%d pixels each on %d strips)\n"
           "Accepting max %d strips per packet.\n",
