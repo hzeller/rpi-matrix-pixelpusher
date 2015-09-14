@@ -53,7 +53,7 @@ static const uint8_t kPixelPusherCommandMagic[16] = {0x40, 0x09, 0x2d, 0xa6,
 // Typicall, the PixelPusher network will attempt to send smaller,
 // non-fragmenting packets of size 1460; however, we would accept up to
 // the UDP packet size.
-static const int kMaxUDPPacketSize = 65535;
+static const int kMaxUDPPacketSize = 65507;  // largest practical w/ IPv4 header
 static const int kDefaultUDPPacketSize = 1460;
 
 // Say we want 60Hz update and 9 packets per frame (7 strips / packet), we
@@ -368,9 +368,9 @@ static int usage(const char *progname) {
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
           "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
-          "\t                Best use the maximum that works with your network (up to 65535).\n"
+          "\t                Best use the maximum that works with your network (up to %d).\n"
           "\t-d            : run as daemon. Use this when starting in /etc/init.d\n",
-          kDefaultUDPPacketSize);
+          kDefaultUDPPacketSize, kMaxUDPPacketSize);
   return 1;
 }
 
@@ -454,7 +454,8 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   if (udp_packet_size < 200 || udp_packet_size > kMaxUDPPacketSize) {
-    fprintf(stderr, "UDP packet size out of range.\n");
+    fprintf(stderr, "UDP packet size out of range (200...%d)\n",
+            kMaxUDPPacketSize);
     return 1;
   }
 

@@ -51,7 +51,7 @@ Options:
         -a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0
         -i <iface>    : network interface, such as eth0, wlan0. Default eth0
         -u <udp-size> : Max UDP data/packet (default 1460)
-                        Best use the maximum that works with your network (up to 65535).
+                        Best use the maximum that works with your network (up to 65507).
         -d            : run as daemon. Use this when starting in /etc/init.d
 ```
 
@@ -67,9 +67,9 @@ For details of `-P` and `-c` refer to the [library documentation][rgb-matrix-lib
 The `-u` parameter specifies the size of the allowed UDP packets. Some network switches don't
 like this large packets so the default is a conservative 1460 here.
 But since we have a lot of pixels, using the highest number possible is desirable so
-ideally we can transmit a full frame-buffer with one packet (use something like 65535 here):
+ideally we can transmit a full frame-buffer with one packet (use something like 65507 here):
 
-     sudo ./pixel-push -u 65535
+     sudo ./pixel-push -u 65507
 
 
 Even if the network supports it, sometimes sending devices limit the packet size (e.g. iOS,
