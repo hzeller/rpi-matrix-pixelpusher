@@ -559,8 +559,9 @@ int main(int argc, char *argv[]) {
   Beacon *discovery_beacon = new Beacon(header, pixel_pusher_container);
   PacketReceiver *receiver = new PacketReceiver(canvas, discovery_beacon);
 
-  receiver->Start(0);         // fairly low priority
-  discovery_beacon->Start(5); // This should accurately send updates.
+  // Start threads, choose priority and CPU affinity.
+  receiver->Start(1, (1<<1));         // fairly low priority
+  discovery_beacon->Start(5, (1<<2)); // This should accurately send updates.
 
   if (as_daemon) {
     for(;;) sleep(INT_MAX);
