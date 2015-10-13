@@ -536,7 +536,7 @@ int main(int argc, char *argv[]) {
   PacketReceiver *receiver = new PacketReceiver(matrix, discovery_beacon);
 
   // Start threads, choose priority and CPU affinity.
-  receiver->Start(1, (1<<1));         // fairly low priority
+  receiver->Start(0, (1<<1));         // userspace priority
   discovery_beacon->Start(5, (1<<2)); // This should accurately send updates.
 
   if (as_daemon) {
