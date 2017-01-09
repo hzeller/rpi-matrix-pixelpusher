@@ -343,12 +343,7 @@ static int usage(const char *progname) {
           "\t                Best use the maximum that works with your network (up to %d).\n"
           "\t-d            : run as daemon. Use this when starting in /etc/init.d\n"
           "\t-U            : Panel with each chain arranged in an sidways U. This gives you double the height and half the width.\n"
-          "\t-R <rotation> : Rotate display by given degrees (steps of 90).\n"
-          "\t-r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. "
-          "Default: 32\n"
-          "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
-          "\t-P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.\n"
-          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n",
+          "\t-R <rotation> : Rotate display by given degrees (steps of 90).\n",
           kDefaultUDPPacketSize, kMaxUDPPacketSize);
 
   rgb_matrix::PrintMatrixFlags(stderr);
