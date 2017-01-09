@@ -305,8 +305,7 @@ public:
       const int received_strips = buffer_bytes / strip_data_len;
       // If all rows change, better fill a full frame buffer to avoid tearing.
       const bool do_fullscreen_swap = (received_strips == all_rows);
-      Canvas *const draw_canvas = matrix_->transformer()
-        ->Transform(do_fullscreen_swap ? off_screen : on_screen);
+      Canvas *const draw_canvas = do_fullscreen_swap ? off_screen : on_screen;
       for (int i = 0; i < received_strips; ++i) {
         StripData *data = (StripData *) buf_pos;
         // Copy into frame buffer.
@@ -337,60 +336,76 @@ private:
 static int usage(const char *progname) {
   fprintf(stderr, "usage: %s <options>\n", progname);
   fprintf(stderr, "Options:\n"
+          "\t-i <iface>    : network interface, such as eth0, wlan0. "
+          "Default eth0\n"
+          "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
+          "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
+          "\t                Best use the maximum that works with your network (up to %d).\n"
+          "\t-d            : run as daemon. Use this when starting in /etc/init.d\n"
+          "\t-U            : Panel with each chain arranged in an sidways U. This gives you double the height and half the width.\n"
+          "\t-R <rotation> : Rotate display by given degrees (steps of 90).\n"
           "\t-r <rows>     : Display rows. 16 for 16x32, 32 for 32x32. "
           "Default: 32\n"
           "\t-c <chained>  : Daisy-chained boards. Default: 1.\n"
           "\t-P <parallel> : For Plus-models or RPi2: parallel chains. 1..3.\n"
-          "\t-L            : 'Large' display, composed out of 4 times 32x32\n"
-          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n"
-          "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
-          "\t-i <iface>    : network interface, such as eth0, wlan0. "
-          "Default eth0\n"
-          "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
-          "\t                Best use the maximum that works with your network (up to %d).\n"
-          "\t-d            : run as daemon. Use this when starting in /etc/init.d\n",
+          "\t-p <pwm-bits> : Bits used for PWM. Something between 1..11\n",
           kDefaultUDPPacketSize, kMaxUDPPacketSize);
+
+  rgb_matrix::PrintMatrixFlags(stderr);
+
   return 1;
 }
 
 int main(int argc, char *argv[]) {
   bool do_luminance_correct = true;
-  bool large_display = false;  // 64x64
-  bool as_daemon = false;
-  int pwm_bits = -1;
-  int rows = 32;
-  int chain = 1;
-  int parallel = 1;
+  bool ushape_display = false;  // 64x64
   int artnet_universe = -1;
   int artnet_channel = -1;
+  int rotation = 0;
   int udp_packet_size = kDefaultUDPPacketSize;
   const char *interface = kNetworkInterface;
 
+  RGBMatrix::Options matrix_options;
+  matrix_options.rows = 32;
+  matrix_options.chain_length = 1;
+  matrix_options.parallel = 1;
+  rgb_matrix::RuntimeOptions runtime_opt;
+  if (!ParseOptionsFromFlags(&argc, &argv, &matrix_options, &runtime_opt)) {
+    return usage(argv[0]);
+  }
+
   int opt;
-  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:a:")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:a:R:U")) != -1) {
     switch (opt) {
     case 'd':
-      as_daemon = true;
+      runtime_opt.daemon = 1;
       break;
-    case 'l':   // Still supported, but not really useful.
+    case 'l':   // Hidden option. Still supported, but not really useful.
       do_luminance_correct = !do_luminance_correct;
       break;
-    case 'L':
-      rows = 32;
-      chain = 4;
-      large_display = true;
+    case 'L':   // Hidden option; used to be a specialized -U
+      matrix_options.rows = 32;
+      matrix_options.chain_length = 4;
+      rotation = 180;  // This is what the old transformer did.
+      ushape_display = true;
+      break;
+    case 'U':
+      ushape_display = true;
+      break;
+    case 'R':
+      rotation = atoi(optarg);
       break;
     case 'P':
-      parallel = atoi(optarg);
+      matrix_options.parallel = atoi(optarg);
       break;
     case 'c':
-      chain = atoi(optarg);
+      matrix_options.chain_length = atoi(optarg);
       break;
     case 'r':
-      rows = atoi(optarg);
+      matrix_options.rows = atoi(optarg);
       break;
     case 'p':
-      pwm_bits = atoi(optarg);
+      matrix_options.pwm_bits = atoi(optarg);
       break;
     case 'i':
       interface = strdup(optarg);
@@ -416,40 +431,19 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  if (rows != 16 && rows != 32) {
-    fprintf(stderr, "Rows can either be 16 or 32\n");
-    return 1;
-  }
-
-  if (chain < 1) {
-    fprintf(stderr, "Chain outside usable range\n");
-    return 1;
-  }
-  if (chain > 8) {
-    fprintf(stderr, "That is a long chain. Expect some flicker.\n");
-  }
-  if (parallel < 1 || parallel > 3) {
-    fprintf(stderr, "Parallel outside usable range.\n");
-    return 1;
-  }
   if (udp_packet_size < 200 || udp_packet_size > kMaxUDPPacketSize) {
     fprintf(stderr, "UDP packet size out of range (200...%d)\n",
             kMaxUDPPacketSize);
     return 1;
   }
 
-  // Init RGB matrix
-  GPIO io;
-  if (!io.Init())
-    return 1;
-
-  // Start daemon before we start any threads.
-  if (as_daemon) {
-    if (fork() != 0)
-      return 0;
-    close(STDIN_FILENO);
-    close(STDOUT_FILENO);
-    close(STDERR_FILENO);
+  RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
+  matrix->set_luminance_correct(do_luminance_correct);
+  if (ushape_display) {
+    matrix->ApplyStaticTransformer(UArrangementTransformer(matrix_options.parallel));
+  }
+  if (rotation > 0) {
+    matrix->ApplyStaticTransformer(RotateTransformer(rotation));
   }
 
   // Init PixelPusher protocol
@@ -476,17 +470,6 @@ int main(int argc, char *argv[]) {
   header.product_id = 0;
   header.sw_revision = kSoftwareRevision;
   header.link_speed = 10000000;  // 10MBit
-
-  RGBMatrix *matrix = new RGBMatrix(&io, rows, chain, parallel);
-  if (pwm_bits > 0 && !matrix->SetPWMBits(pwm_bits)) {
-    fprintf(stderr, "Invalid range of pwm-bits");
-    return 1;
-  }
-  matrix->set_luminance_correct(do_luminance_correct);
-
-  if (large_display) {
-    matrix->SetTransformer(new LargeSquare64x64Transformer());
-  }
 
   const int number_of_strips = matrix->height();
   const int pixels_per_strip = matrix->width();
@@ -539,7 +522,7 @@ int main(int argc, char *argv[]) {
   receiver->Start(0, (1<<1));         // userspace priority
   discovery_beacon->Start(5, (1<<2)); // This should accurately send updates.
 
-  if (as_daemon) {
+  if (runtime_opt.daemon == 1) {
     for(;;) sleep(INT_MAX);
   } else {
     printf("Press <RETURN> to shut down (supply -d option to run as daemon)\n");
