@@ -73,7 +73,7 @@ on the network. Number of 'strips' will be number of rows, so 16 or 32 multiplie
 
 #### Network UDP packet size
 The `-u` parameter specifies the size of the allowed UDP packets. Some network
-switches (and the original PixelPusher hardware) don't like this large packets
+switches (and the original PixelPusher hardware) don't like large packets
 so the default is a conservative 1460 here.
 
 But since we have a lot of pixels, using the highest number possible is
