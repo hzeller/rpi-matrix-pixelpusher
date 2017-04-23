@@ -79,6 +79,8 @@ static int usage(const char *progname) {
   fprintf(stderr, "Options:\n"
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
+          "\t-G <group>    : PixelPusher group (default: 0)\n"
+          "\t-C <controller> : PixelPusher controller (default: 0)\n"
           "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
           "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
           "\t                Best use the maximum that works with your network (up to %d).\n"
@@ -112,7 +114,7 @@ int main(int argc, char *argv[]) {
   }
 
   int opt;
-  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:a:R:U")) != -1) {
+  while ((opt = getopt(argc, argv, "dlLP:c:r:p:i:u:a:R:UG:C:")) != -1) {
     switch (opt) {
     case 'd':
       runtime_opt.daemon = 1;
@@ -149,6 +151,12 @@ int main(int argc, char *argv[]) {
       break;
     case 'u':
       pp_options.udp_packet_size = atoi(optarg);
+      break;
+    case 'G':
+      pp_options.group = atoi(optarg);
+      break;
+    case 'C':
+      pp_options.controller = atoi(optarg);
       break;
     case 'a':
       if (2 != sscanf(optarg, "%d,%d",
