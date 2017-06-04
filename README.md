@@ -44,6 +44,8 @@ These are the available options
 usage: ./pixel-push <options>
 Options:
         -i <iface>    : network interface, such as eth0, wlan0. Default eth0
+        -G <group>    : PixelPusher group (default: 0)
+        -C <controller> : PixelPusher controller (default: 0)
         -a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0
         -u <udp-size> : Max UDP data/packet (default 1460)
                         Best use the maximum that works with your network (up to 65507).
@@ -59,7 +61,7 @@ Options:
         --led-scan-mode=<0..1>    : 0 = progressive; 1 = interlaced (Default: 0).
         --led-show-refresh        : Show refresh rate.
         --led-inverse             : Switch if your matrix has inverse colors on.
-        --led-swap-green-blue     : Switch if your matrix has green/blue swapped on.
+        --led-rgb-sequence        : Switch if your matrix has led colors swapped (Default: "RGB")
         --led-pwm-lsb-nanoseconds : PWM Nanoseconds for LSB (Default: 130)
         --led-no-hardware-pulse   : Don't use hardware pin-pulse generation.
         --led-slowdown-gpio=<0..2>: Slowdown GPIO. Needed for faster Pis and/or slower panels (Default: 1).
