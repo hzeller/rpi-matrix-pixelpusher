@@ -53,12 +53,15 @@ Options:
         -U            : Panel with each chain arranged in an sidways U. This gives you double the height and half the width.
         -R <rotation> : Rotate display by given degrees (steps of 90).
         --led-gpio-mapping=<name> : Name of GPIO mapping used. Default "regular"
-        --led-rows=<rows>         : Panel rows. 8, 16, 32 or 64. (Default: 32).
+        --led-rows=<rows>         : Panel rows. Typically 8, 16, 32 or 64. (Default: 32).
+        --led-cols=<cols>         : Panel columns. Typically 32 or 64. (Default: 32).
         --led-chain=<chained>     : Number of daisy-chained panels. (Default: 1).
         --led-parallel=<parallel> : For A/B+ models or RPi2,3b: parallel chains. range=1..3 (Default: 1).
+        --led-multiplexing=<0..3> : Multiplexing type: 0=direct; 1=strip; 2=checker; 3=spiral (Default: 0)
         --led-pwm-bits=<1..11>    : PWM bits (Default: 11).
         --led-brightness=<percent>: Brightness in percent (Default: 100).
         --led-scan-mode=<0..1>    : 0 = progressive; 1 = interlaced (Default: 0).
+        --led-row-addr-type=<0..1>: 0 = default; 1=AB-addressed panels (Default: 0).
         --led-show-refresh        : Show refresh rate.
         --led-inverse             : Switch if your matrix has inverse colors on.
         --led-rgb-sequence        : Switch if your matrix has led colors swapped (Default: "RGB")
