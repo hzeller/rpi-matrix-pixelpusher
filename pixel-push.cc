@@ -77,6 +77,7 @@ private:
 static int usage(const char *progname) {
   fprintf(stderr, "usage: %s <options>\n", progname);
   fprintf(stderr, "Options:\n"
+          "\t-l            : toggle logarithmic response (default: off)\n"
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
           "\t-G <group>    : PixelPusher group (default: 0)\n"
@@ -119,7 +120,7 @@ int main(int argc, char *argv[]) {
     case 'd':
       runtime_opt.daemon = 1;
       break;
-    case 'l':   // Hidden option. Still supported, but not really useful.
+    case 'l':
       pp_options.is_logarithmic = !pp_options.is_logarithmic;
       break;
     case 'L':   // Hidden option; used to be a specialized -U
