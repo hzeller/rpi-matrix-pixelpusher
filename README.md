@@ -43,31 +43,33 @@ These are the available options
 ```
 usage: ./pixel-push <options>
 Options:
+        -l            : Switch on logarithmic response (default: off)
         -i <iface>    : network interface, such as eth0, wlan0. Default eth0
         -G <group>    : PixelPusher group (default: 0)
         -C <controller> : PixelPusher controller (default: 0)
         -a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0
         -u <udp-size> : Max UDP data/packet (default 1460)
                         Best use the maximum that works with your network (up to 65507).
-        -d            : run as daemon. Use this when starting in /etc/init.d
-        -U            : Panel with each chain arranged in an sidways U. This gives you double the height and half the width.
-        -R <rotation> : Rotate display by given degrees (steps of 90).
+        -d            : Same as --led-daemon. Use this when starting in init scripts.
         --led-gpio-mapping=<name> : Name of GPIO mapping used. Default "regular"
         --led-rows=<rows>         : Panel rows. Typically 8, 16, 32 or 64. (Default: 32).
         --led-cols=<cols>         : Panel columns. Typically 32 or 64. (Default: 32).
         --led-chain=<chained>     : Number of daisy-chained panels. (Default: 1).
-        --led-parallel=<parallel> : For A/B+ models or RPi2,3b: parallel chains. range=1..3 (Default: 1).
-        --led-multiplexing=<0..3> : Multiplexing type: 0=direct; 1=strip; 2=checker; 3=spiral (Default: 0)
+        --led-parallel=<parallel> : Parallel chains. range=1..3 (Default: 1).
+        --led-multiplexing=<0..6> : Mux type: 0=direct; 1=Stripe; 2=Checkered; 3=Spiral; 4=ZStripe; 5=ZnMirrorZStripe; 6=coreman (Default: 0)
+        --led-pixel-mapper        : Semicolon-separated list of pixel-mappers to arrange pixels.
+                                    Optional params after a colon e.g. "U-mapper;Rotate:90"
+                                    Available: "Rotate", "U-mapper". Default: ""
         --led-pwm-bits=<1..11>    : PWM bits (Default: 11).
         --led-brightness=<percent>: Brightness in percent (Default: 100).
         --led-scan-mode=<0..1>    : 0 = progressive; 1 = interlaced (Default: 0).
-        --led-row-addr-type=<0..1>: 0 = default; 1=AB-addressed panels (Default: 0).
+        --led-row-addr-type=<0..2>: 0 = default; 1 = AB-addressed panels; 2 = direct row select(Default: 0).
         --led-show-refresh        : Show refresh rate.
         --led-inverse             : Switch if your matrix has inverse colors on.
         --led-rgb-sequence        : Switch if your matrix has led colors swapped (Default: "RGB")
         --led-pwm-lsb-nanoseconds : PWM Nanoseconds for LSB (Default: 130)
         --led-no-hardware-pulse   : Don't use hardware pin-pulse generation.
-        --led-slowdown-gpio=<0..2>: Slowdown GPIO. Needed for faster Pis and/or slower panels (Default: 1).
+        --led-slowdown-gpio=<0..2>: Slowdown GPIO. Needed for faster Pis/slower panels (Default: 1).
         --led-daemon              : Make the process run in the background as daemon.
         --led-no-drop-privs       : Don't drop privileges from 'root' after initializing the hardware.
 ```
@@ -120,8 +122,8 @@ feature of connecting multiple parallel chains to one Raspberry Pi; the [adapter
 in the underlying project provides three outputs.
 
 If you have the Adafruit HAT, then you only can do one chain, but you can
-arrange them in a sideways 'U' shape to get a more square display. This is what
-the `-U` option is for.
+arrange them in a sideways 'U' shape to get a more square display. This
+then can be mapped correctly with `--led-pixel-mapper="U-mapper"`.
 
 Here are four panels arranged in a square on a single
 connector, typically something you might want do do if you want a 64x64
@@ -133,7 +135,7 @@ chain):
    [>][>]
 ```
 
-(`-U --led-chain=4 --led-parallel=1`).
+(`--led-pixel-mapper="U-mapper" --led-chain=4 --led-parallel=1`).
 
 This is how it looks wired up from the back:
 
@@ -145,7 +147,7 @@ How about 6 panels ?
    [>][>][>]
 ```
 
-(`-U --led-chain=6 --led-parallel=1`).
+(`--led-pixel-mapper="U-mapper" --led-chain=6 --led-parallel=1`).
 
 
 This even works if you have multiple parallel chains. Here is an arrangement
@@ -158,11 +160,11 @@ with two chains with 8 panels each:
    [>][>][>][>]
 ```
 
-(`-U --led-chain=8 --led-parallel=2`).
+(`--led-pixel-mapper="U-mapper" --led-chain=8 --led-parallel=2`).
 
 
-The `-U` option essentially gives you half the width of a panel, but double
-the height.
+The `--led-pixel-mapper="U-mapper"` option essentially gives you half the
+width of a panel, but double the height.
 
 If you have a Raspberry Pi 2 or later consider assembling a display using
 parallel chains, for instance using the [adapter] that is provided in the

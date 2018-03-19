@@ -77,7 +77,7 @@ private:
 static int usage(const char *progname) {
   fprintf(stderr, "usage: %s <options>\n", progname);
   fprintf(stderr, "Options:\n"
-          "\t-l            : toggle logarithmic response (default: off)\n"
+          "\t-l            : Switch on logarithmic response (default: off)\n"
           "\t-i <iface>    : network interface, such as eth0, wlan0. "
           "Default eth0\n"
           "\t-G <group>    : PixelPusher group (default: 0)\n"
@@ -85,9 +85,7 @@ static int usage(const char *progname) {
           "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
           "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
           "\t                Best use the maximum that works with your network (up to %d).\n"
-          "\t-d            : run as daemon. Use this when starting in /etc/init.d\n"
-          "\t-U            : Panel with each chain arranged in an sidways U. This gives you double the height and half the width.\n"
-          "\t-R <rotation> : Rotate display by given degrees (steps of 90).\n",
+          "\t-d            : Same as --led-daemon. Use this when starting in init scripts.\n",
           kDefaultUDPPacketSize, kMaxUDPPacketSize);
 
   rgb_matrix::PrintMatrixFlags(stderr);
@@ -103,7 +101,7 @@ int main(int argc, char *argv[]) {
   pp_options.network_interface = "eth0";
 
   bool ushape_display = false;  // 64x64
-  int rotation = 0;
+  const char* rotation = NULL;
 
   RGBMatrix::Options matrix_options;
   matrix_options.rows = 32;
@@ -121,19 +119,24 @@ int main(int argc, char *argv[]) {
       runtime_opt.daemon = 1;
       break;
     case 'l':
-      pp_options.is_logarithmic = !pp_options.is_logarithmic;
+      pp_options.is_logarithmic = true;
       break;
     case 'L':   // Hidden option; used to be a specialized -U
+      fprintf(stderr, "-L is deprecated. use\n\t--led-pixel-mapper=\"U-mapper;Rotate:180\" --led-chain=4\ninstead\n");
       matrix_options.rows = 32;
       matrix_options.chain_length = 4;
-      rotation = 180;  // This is what the old transformer did.
+      rotation = "180";  // This is what the old transformer did.
       ushape_display = true;
       break;
-    case 'U':
+    case 'U':  // Hidden option; use --led-pixel-mapper instead
+      fprintf(stderr, "-U is deprecated. Use --led-pixel-mapper=\"U-mapper\" "
+              "instead\n");
       ushape_display = true;
       break;
-    case 'R':
-      rotation = atoi(optarg);
+    case 'R':  // Hidden option: use --led-pixel-mapper instead
+      fprintf(stderr, "-R is deprecated. Use --led-pixel-mapper=\"Rotate:%s\" "
+              "instead\n", optarg);
+      rotation = strdup(optarg);
       break;
     case 'P':
       matrix_options.parallel = atoi(optarg);
@@ -171,6 +174,19 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  // Support for deprecated rotation options.
+  std::string pixel_map_config;
+  if (matrix_options.pixel_mapper_config)
+    pixel_map_config.append(matrix_options.pixel_mapper_config);
+  if (ushape_display) {
+    pixel_map_config.insert(0, "U-mapper;");
+    matrix_options.pixel_mapper_config = pixel_map_config.c_str();
+  }
+  if (rotation) {
+    pixel_map_config.append(";").append("Rotate:").append(rotation);
+    matrix_options.pixel_mapper_config = pixel_map_config.c_str();
+  }
+
   // Some parameter checks.
   if (getuid() != 0) {
     fprintf(stderr, "Must run as root to be able to access /dev/mem\n"
@@ -180,12 +196,6 @@ int main(int argc, char *argv[]) {
 
   RGBMatrix *matrix = CreateMatrixFromOptions(matrix_options, runtime_opt);
   matrix->set_luminance_correct(pp_options.is_logarithmic);
-  if (ushape_display) {
-    matrix->ApplyStaticTransformer(UArrangementTransformer(matrix_options.parallel));
-  }
-  if (rotation > 0) {
-    matrix->ApplyStaticTransformer(RotateTransformer(rotation));
-  }
 
   RGBMatrixDevice device(matrix);
   if (!pp::StartPixelPusherServer(pp_options, &device)) {
