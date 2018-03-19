@@ -82,7 +82,7 @@ static int usage(const char *progname) {
           "Default eth0\n"
           "\t-G <group>    : PixelPusher group (default: 0)\n"
           "\t-C <controller> : PixelPusher controller (default: 0)\n"
-          "\t-a <artnet-universe,artnet-channel>: if used with artnet. Default 0,0\n"
+          "\t-a <artnet-universe,artnet-channel>: if used with artnet bridge. Default 0,0\n"
           "\t-u <udp-size> : Max UDP data/packet (default %d)\n"
           "\t                Best use the maximum that works with your network (up to %d).\n"
           "\t-d            : Same as --led-daemon. Use this when starting in init scripts.\n",
