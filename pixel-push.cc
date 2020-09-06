@@ -23,7 +23,6 @@
 #include <unistd.h>
 
 #include "led-matrix.h"
-#include "transformer.h"
 #include "pp-server.h"
 
 using namespace rgb_matrix;
